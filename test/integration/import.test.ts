@@ -10,6 +10,15 @@ function catalog(overrides: Record<string, unknown> = {}) {
   return harness.catalog;
 }
 
+/** A minimal valid document that declares no servers entry. */
+function noServersSpec(): string {
+  return JSON.stringify({
+    openapi: '3.0.3',
+    info: { title: 'No Servers', version: '1' },
+    paths: { '/x': { get: { operationId: 'x', responses: { '200': { description: 'OK' } } } } },
+  });
+}
+
 afterEach(() => {
   harness?.close();
   harness = undefined;
@@ -206,15 +215,57 @@ describe('add_api import pipeline', () => {
 
   it('warns when no usable server is declared', async () => {
     const c = catalog();
-    const result = await c.addApi({
-      specContent: JSON.stringify({
-        openapi: '3.0.3',
-        info: { title: 'No Servers', version: '1' },
-        paths: { '/x': { get: { operationId: 'x', responses: { '200': { description: 'OK' } } } } },
-      }),
-    });
+    const result = await c.addApi({ specContent: noServersSpec() });
     expect(result.warnings.join(' ')).toMatch(/no usable servers/);
     expect(result.environments).toEqual([]);
+  });
+
+  it('does not warn about servers when default_base_url is supplied', async () => {
+    const c = catalog();
+    const result = await c.addApi({
+      specContent: noServersSpec(),
+      defaultBaseUrl: 'https://api.example.com/v1',
+    });
+    expect(result.warnings.join(' ')).not.toMatch(/no usable servers/);
+    expect(result.environments[0]?.base_url).toBe('https://api.example.com/v1');
+  });
+
+  it('binds default_base_url on re-import of an unchanged specification', async () => {
+    const c = catalog();
+    const first = await c.addApi({ specContent: noServersSpec() });
+    expect(first.environments).toEqual([]);
+
+    // Same bytes, so no new version is created — but the environment must still bind,
+    // otherwise the remedy the warning recommends can never be applied.
+    const second = await c.addApi({
+      specContent: noServersSpec(),
+      defaultBaseUrl: 'https://api.example.com/v1',
+      replace: true,
+    });
+    expect(second.status).toBe('unchanged');
+    expect(second.environments).toEqual([
+      expect.objectContaining({
+        name: 'default',
+        base_url: 'https://api.example.com/v1',
+        allow_mutations: false,
+        source: 'add_api',
+      }),
+    ]);
+  });
+
+  // The pre-flight check covers scheme, embedded credentials and allowed_hosts; address
+  // classification happens at connect time (see test/security/ssrf-spec-fetch.test.ts).
+  // This asserts the pre-flight still runs on the short-circuited path.
+  it('pre-flights default_base_url on an unchanged re-import', async () => {
+    const c = catalog();
+    await c.addApi({ specContent: noServersSpec() });
+    await expect(
+      c.addApi({
+        specContent: noServersSpec(),
+        defaultBaseUrl: 'ftp://files.example.com/v1',
+        replace: true,
+      }),
+    ).rejects.toMatchObject({ code: 'NETWORK_DESTINATION_BLOCKED' });
   });
 
   it('records security schemes in the stored document', async () => {

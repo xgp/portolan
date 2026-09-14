@@ -104,7 +104,6 @@ export class Importer {
 
     // --- metadata ----------------------------------------------------------
     const metadata = deriveMetadata(bundled);
-    warnings.push(...metadata.warnings);
 
     const apiId = input.apiId?.trim() || deriveApiId(metadata.title);
     if (!isValidApiId(apiId)) {
@@ -124,11 +123,50 @@ export class Importer {
       );
     }
 
+    // --- environment binding ------------------------------------------------
+    // Resolved before the "unchanged" short-circuit below: an environment is
+    // configuration rather than specification content, so a caller-supplied
+    // default_base_url must take effect even when the document itself has not changed.
+    // Otherwise the documented remedy for "declares no usable servers entry" is
+    // unreachable for an API that was first imported without one.
+    const authProfile = this.resolveRequestedAuthProfile(input.authProfile);
+    const environmentName = input.defaultEnvironment?.trim() || 'default';
+    const baseUrl = input.defaultBaseUrl?.trim() || metadata.serverUrls[0];
+    if (input.defaultBaseUrl) {
+      // Fail fast on a base URL the policy would refuse at call time.
+      assertUrlAllowed(input.defaultBaseUrl, this.options.policy);
+    }
+    if (!baseUrl) {
+      warnings.push(
+        'The specification declares no usable servers entry; supply default_base_url or configure an environment before calling operations.',
+      );
+    }
+    if (metadata.serverUrls.length > 1) {
+      warnings.push(
+        `The specification declares ${metadata.serverUrls.length} servers; only the first was used for the '${environmentName}' environment. Configure additional environments in config.yaml.`,
+      );
+    }
+
+    // docs/DEVIATIONS.md D6: never overwrite an existing (possibly configured)
+    // environment, and never grant mutation rights from an import.
+    const environmentRecord = baseUrl
+      ? {
+          apiId,
+          name: environmentName,
+          baseUrl,
+          authProfile,
+          isDefault: true,
+          allowMutations: false,
+          source: input.defaultBaseUrl ? ('add_api' as const) : ('spec' as const),
+        }
+      : undefined;
+
     const hash = specHash(bundled);
     if (existing) {
       const currentVersion = this.apis.getCurrentVersion(apiId);
       if (currentVersion?.specHash === hash) {
         // SPEC.md §44 — identical content, no new version.
+        if (environmentRecord) this.environments.insertIfAbsent(environmentRecord);
         return {
           api_id: apiId,
           name: existing.name,
@@ -179,20 +217,6 @@ export class Importer {
       };
     });
 
-    // --- environments ------------------------------------------------------
-    const authProfile = this.resolveRequestedAuthProfile(input.authProfile);
-    const environmentName = input.defaultEnvironment?.trim() || 'default';
-    const baseUrl = input.defaultBaseUrl?.trim() || metadata.serverUrls[0];
-    if (input.defaultBaseUrl) {
-      // Fail fast on a base URL the policy would refuse at call time.
-      assertUrlAllowed(input.defaultBaseUrl, this.options.policy);
-    }
-    if (metadata.serverUrls.length > 1) {
-      warnings.push(
-        `The specification declares ${metadata.serverUrls.length} servers; only the first was used for the '${environmentName}' environment. Configure additional environments in config.yaml.`,
-      );
-    }
-
     // --- persist (one transaction, SPEC.md §10) ----------------------------
     const name = input.name?.trim() || metadata.title || apiId;
     const description = input.description?.trim() || metadata.description || null;
@@ -222,19 +246,7 @@ export class Importer {
       this.operations.insertMany(operationRecords);
       this.apis.setCurrentVersion(apiId, versionId);
 
-      if (baseUrl) {
-        // docs/DEVIATIONS.md D6: never overwrite an existing (possibly configured)
-        // environment, and never grant mutation rights from an import.
-        this.environments.insertIfAbsent({
-          apiId,
-          name: environmentName,
-          baseUrl,
-          authProfile,
-          isDefault: true,
-          allowMutations: false,
-          source: input.defaultBaseUrl ? 'add_api' : 'spec',
-        });
-      }
+      if (environmentRecord) this.environments.insertIfAbsent(environmentRecord);
 
       const api = this.apis.get(apiId)!;
       this.index.reindexApi({ api, version });

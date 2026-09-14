@@ -34,11 +34,9 @@ export interface DerivedMetadata {
   openapiVersion: string | undefined;
   serverUrls: string[];
   tags: string[];
-  warnings: string[];
 }
 
 export function deriveMetadata(document: OpenApiDocument): DerivedMetadata {
-  const warnings: string[] = [];
   const info = document.info ?? {};
 
   const serverUrls: string[] = [];
@@ -46,11 +44,6 @@ export function deriveMetadata(document: OpenApiDocument): DerivedMetadata {
   for (const server of servers) {
     const url = resolveServerUrl(server);
     if (url) serverUrls.push(url);
-  }
-  if (serverUrls.length === 0) {
-    warnings.push(
-      'The specification declares no usable servers entry; supply default_base_url or configure an environment before calling operations.',
-    );
   }
 
   const tags = Array.isArray(document.tags)
@@ -66,7 +59,6 @@ export function deriveMetadata(document: OpenApiDocument): DerivedMetadata {
     openapiVersion: typeof document.openapi === 'string' ? document.openapi : undefined,
     serverUrls,
     tags,
-    warnings,
   };
 }
 
