@@ -124,10 +124,10 @@ export interface InspectApiResult {
 // ---------------------------------------------------------------------------
 
 export interface CallParameters {
-  path?: Record<string, unknown>;
-  query?: Record<string, unknown>;
-  header?: Record<string, unknown>;
-  cookie?: Record<string, unknown>;
+  path?: Record<string, unknown> | undefined;
+  query?: Record<string, unknown> | undefined;
+  header?: Record<string, unknown> | undefined;
+  cookie?: Record<string, unknown> | undefined;
 }
 
 export interface CallApiInput {
@@ -149,8 +149,12 @@ export interface CallApiResult {
     content_type?: string;
     body: unknown;
     truncated?: boolean;
+    /** Set when `body` holds base64 rather than text or JSON (SPEC.md §51). */
+    body_encoding?: 'base64';
   };
   duration_ms: number;
+  /** Non-fatal notes, e.g. parameters the operation does not declare. */
+  warnings?: string[];
 }
 
 // ---------------------------------------------------------------------------

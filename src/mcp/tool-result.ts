@@ -5,13 +5,11 @@
  * error envelope, not as JSON-RPC protocol errors, so an agent can read and recover from
  * them (docs/DEVIATIONS.md D15).
  */
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { toErrorEnvelope } from '../errors/errors.js';
 
-export interface McpToolResult {
-  content: { type: 'text'; text: string }[];
-  structuredContent?: Record<string, unknown>;
-  isError?: boolean;
-}
+/** The MCP SDK's tool-result shape, narrowed to the parts Portolan produces. */
+export type McpToolResult = CallToolResult;
 
 /** Serialize a payload, truncating when it would exceed `max_tool_response_bytes`. */
 export function toolSuccess(payload: unknown, maxBytes: number): McpToolResult {
@@ -46,7 +44,7 @@ export function toolError(error: unknown): McpToolResult {
   const envelope = toErrorEnvelope(error);
   return {
     content: [{ type: 'text', text: JSON.stringify(envelope, null, 2) }],
-    structuredContent: envelope as unknown as Record<string, unknown>,
+    structuredContent: envelope,
     isError: true,
   };
 }

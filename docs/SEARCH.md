@@ -2,8 +2,8 @@
 
 Portolan's search layer answers two questions, both from natural language:
 
-1. *Which registered API can do this?* — `find_api`
-2. *Which operation in that API does it?* — `search_api`
+1. _Which registered API can do this?_ — `find_api`
+2. _Which operation in that API does it?_ — `search_api`
 
 It uses SQLite FTS5 with BM25 ranking. No embeddings, no external service — SPEC.md §60
 rules them out for the MVP, and FTS keeps Portolan to a single file on disk.
@@ -33,16 +33,16 @@ Three stages.
 
 **1. BM25 with per-column weights.** The weights follow SPEC.md §46's table:
 
-| Column | Weight |
-| --- | --- |
-| canonical operation id | 10 |
-| summary | 10 |
-| source `operationId` | 8 |
-| tags | 6 |
-| path | 4 |
-| description | 2 |
-| parameter names and descriptions | 1.5 |
-| schema names | 0.5 |
+| Column                           | Weight |
+| -------------------------------- | ------ |
+| canonical operation id           | 10     |
+| summary                          | 10     |
+| source `operationId`             | 8      |
+| tags                             | 6      |
+| path                             | 4      |
+| description                      | 2      |
+| parameter names and descriptions | 1.5    |
+| schema names                     | 0.5    |
 
 **2. Query expansion.** BM25 is lexical: "disable a user" cannot match "deactivate an
 account" on its own. A small, hand-audited synonym table (`src/search/query.ts`,
@@ -50,7 +50,7 @@ account" on its own. A small, hand-audited synonym table (`src/search/query.ts`,
 query. This widens recall only — it does not on its own change the order.
 
 **3. Term-coverage re-ranking.** Candidates are re-scored with a bonus proportional to
-how many of the words the caller *actually typed* appear in the high-value fields. This
+how many of the words the caller _actually typed_ appear in the high-value fields. This
 is what stops an expansion term from floating a weakly-related operation above an exact
 match. Deprecated operations take a fixed penalty, so a live operation outranks a
 deprecated sibling.
@@ -84,7 +84,12 @@ hostile inputs come out inert.
 ```ts
 interface SearchProvider {
   searchApis(query: string, limit: number): Promise<ApiSearchResult[]>;
-  searchOperations(apiId: string, query: string, limit: number, filters?): Promise<OperationSearchResult[]>;
+  searchOperations(
+    apiId: string,
+    query: string,
+    limit: number,
+    filters?,
+  ): Promise<OperationSearchResult[]>;
 }
 ```
 
