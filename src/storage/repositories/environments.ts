@@ -96,6 +96,19 @@ export class EnvironmentRepository {
     return true;
   }
 
+  /**
+   * Clear the default flag on environments Portolan derived itself. Called when
+   * configuration defines a default for the API: configured values are authoritative
+   * (SPEC.md §28), so a specification-derived environment must not stay the default.
+   */
+  clearDerivedDefaults(apiId: string): void {
+    this.db
+      .prepare(
+        "UPDATE environments SET is_default = 0, updated_at = ? WHERE api_id = ? AND source != 'config'",
+      )
+      .run(nowIso(), apiId);
+  }
+
   /** Remove environments that came from config but are no longer configured. */
   deleteConfigEnvironmentsNotIn(apiId: string, keepNames: readonly string[]): void {
     for (const env of this.list(apiId)) {

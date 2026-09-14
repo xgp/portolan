@@ -218,6 +218,19 @@ function normalizeHeaders(
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 /**
+ * Discard a response body without letting the abort surface as an unhandled stream
+ * error. `destroy()` on an undici body emits `AbortError`, which crashes the process if
+ * nothing is listening.
+ */
+function discardBody(body: {
+  on(event: 'error', listener: () => void): unknown;
+  destroy(): unknown;
+}): void {
+  body.on('error', () => undefined);
+  body.destroy();
+}
+
+/**
  * Perform an HTTP request under the network policy, following redirects manually.
  */
 export async function safeFetch(
@@ -263,7 +276,7 @@ export async function safeFetch(
       const responseHeaders = normalizeHeaders(response.headers);
 
       if (REDIRECT_STATUSES.has(response.statusCode) && responseHeaders.location) {
-        response.body.destroy();
+        discardBody(response.body);
         if (hop >= options.maxRedirects) {
           throw blocked(
             `Too many redirects (limit ${options.maxRedirects}) starting at ${redactUrl(origin)}.`,
@@ -298,7 +311,7 @@ export async function safeFetch(
       }
 
       const { buffer, truncated } = await readCapped(response.body, options.maxBytes);
-      if (truncated) response.body.destroy();
+      if (truncated) discardBody(response.body);
 
       return {
         status: response.statusCode,

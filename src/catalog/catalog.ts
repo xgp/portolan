@@ -53,8 +53,21 @@ export class Catalog {
     });
   }
 
-  addApi(input: AddApiInput): Promise<AddApiResult> {
-    return this.importer.import(input);
+  async addApi(input: AddApiInput): Promise<AddApiResult> {
+    const result = await this.importer.import(input);
+    // Configured environments are authoritative (SPEC.md §28) and must apply to an API
+    // registered after startup, not only to one that already existed when the process
+    // began. Re-apply them here and report the reconciled list.
+    this.applyConfiguredEnvironments(result.api_id);
+    return {
+      ...result,
+      environments: this.environments.list(result.api_id).map((env) => ({
+        name: env.name,
+        base_url: env.baseUrl,
+        allow_mutations: env.allowMutations,
+        source: env.source,
+      })),
+    };
   }
 
   listApis(): ApiRecord[] {
@@ -143,17 +156,33 @@ export class Catalog {
    * environment that has been removed from config is removed from storage.
    */
   syncConfiguredEnvironments(): void {
-    const byApi = new Map<string, string[]>();
-    for (const env of this.config.environments) {
-      if (!this.apis.get(env.api)) {
+    const configuredApis = new Set(this.config.environments.map((env) => env.api));
+    for (const apiId of configuredApis) {
+      if (!this.apis.get(apiId)) {
         this.logger.warn(
-          { api_id: env.api, environment: env.name },
-          'configured environment references an API that is not imported yet',
+          { api_id: apiId },
+          'configured environment references an API that is not registered yet; it will be applied when the API is added',
         );
         continue;
       }
+      this.applyConfiguredEnvironments(apiId);
+    }
+    // Drop config-sourced environments for APIs that are no longer configured at all.
+    for (const api of this.apis.list()) {
+      if (!configuredApis.has(api.id)) this.environments.deleteConfigEnvironmentsNotIn(api.id, []);
+    }
+  }
+
+  /** Apply the configured environments for one API, overwriting derived ones by name. */
+  private applyConfiguredEnvironments(apiId: string): void {
+    const configured = this.config.environments.filter((env) => env.api === apiId);
+    if (configured.length === 0) {
+      this.environments.deleteConfigEnvironmentsNotIn(apiId, []);
+      return;
+    }
+    for (const env of configured) {
       this.environments.upsert({
-        apiId: env.api,
+        apiId,
         name: env.name,
         baseUrl: env.base_url.replace(/\/+$/, ''),
         authProfile: env.auth_profile ?? null,
@@ -161,11 +190,12 @@ export class Catalog {
         allowMutations: env.allow_mutations,
         source: 'config',
       });
-      byApi.set(env.api, [...(byApi.get(env.api) ?? []), env.name]);
     }
-    for (const api of this.apis.list()) {
-      this.environments.deleteConfigEnvironmentsNotIn(api.id, byApi.get(api.id) ?? []);
-    }
+    if (configured.some((env) => env.is_default)) this.environments.clearDerivedDefaults(apiId);
+    this.environments.deleteConfigEnvironmentsNotIn(
+      apiId,
+      configured.map((env) => env.name),
+    );
   }
 }
 

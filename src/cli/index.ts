@@ -68,7 +68,7 @@ export function buildProgram(): Command {
             : {}),
           ...(options.transport ? { transport: options.transport as 'stdio' | 'http' } : {}),
           ...(options.host ? { host: options.host } : {}),
-          ...(options.port ? { port: options.port } : {}),
+          ...(options.port !== undefined ? { port: options.port } : {}),
         });
 
         if (handle.transport === 'http') {
