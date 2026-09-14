@@ -93,3 +93,17 @@ describe('score shaping', () => {
     ]);
   });
 });
+
+describe('limit clamping (SPEC.md §17, §18)', () => {
+  it('clamps out-of-range limits instead of rejecting them', async () => {
+    const { clampLimit } = await import('../../src/mcp/tools/schemas.js');
+    expect(clampLimit(undefined, 5, 20)).toBe(5);
+    expect(clampLimit(3, 5, 20)).toBe(3);
+    expect(clampLimit(100, 5, 20)).toBe(20);
+    expect(clampLimit(0, 5, 20)).toBe(1);
+    expect(clampLimit(-7, 5, 20)).toBe(1);
+    expect(clampLimit(7.9, 5, 20)).toBe(7);
+    expect(clampLimit(Number.NaN, 5, 20)).toBe(5);
+    expect(clampLimit(Number.POSITIVE_INFINITY, 5, 20)).toBe(5);
+  });
+});

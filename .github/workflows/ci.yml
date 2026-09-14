@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # Deno is required by the run_api_code sandbox suites.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm format:check
+      - run: pnpm build
+      - run: pnpm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t portolan:ci .
+      - name: doctor runs inside the image
+        run: |
+          mkdir -p data
+          printf 'database:\n  path: /data/portolan.db\n' > data/config.yaml
+          docker run --rm -v "$PWD/data:/data" portolan:ci doctor

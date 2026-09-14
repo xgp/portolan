@@ -1,8 +1,0 @@
-{
-  "type": "object",
-  "title": "Item",
-  "properties": {
-    "sku": { "type": "string", "description": "Stock keeping unit" },
-    "price": { "type": "number" }
-  }
-}

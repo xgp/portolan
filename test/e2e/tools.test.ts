@@ -61,6 +61,50 @@ describe('MCP surface', () => {
     expect(result.data.error.message).toContain('nope');
   });
 
+  it('clamps an over-large limit rather than rejecting the call', async () => {
+    await harness.call('add_api', {
+      api_id: 'limits',
+      spec_content: JSON.stringify({
+        openapi: '3.0.3',
+        info: { title: 'Limits', version: '1' },
+        servers: [{ url: 'https://limits.example.com' }],
+        paths: Object.fromEntries(
+          Array.from({ length: 40 }, (_, i) => [
+            `/thing${i}`,
+            {
+              get: {
+                operationId: `thing${i}`,
+                summary: `Get thing ${i}`,
+                responses: { 200: { description: 'OK' } },
+              },
+            },
+          ]),
+        ),
+      }),
+    });
+
+    const found = await harness.call('find_api', { query: 'thing', limit: 500 });
+    expect(found.isError).toBe(false);
+    expect(found.data.results.length).toBeLessThanOrEqual(20);
+
+    const searched = await harness.call('search_api', {
+      api_id: 'limits',
+      query: 'thing',
+      limit: 500,
+    });
+    expect(searched.isError).toBe(false);
+    expect(searched.data.results.length).toBeLessThanOrEqual(30);
+  });
+
+  it('refuses more than ten operations in one inspect_api call', async () => {
+    const result = await harness.call('inspect_api', {
+      api_id: 'limits',
+      operation_ids: Array.from({ length: 11 }, (_, i) => `thing${i}`),
+    });
+    expect(result.isError).toBe(true);
+    expect(result.data.error.message).toMatch(/at most 10 operations/);
+  });
+
   it('reports a bad add_api argument combination as a structured error', async () => {
     const result = await harness.call('add_api', {});
     expect(result.isError).toBe(true);

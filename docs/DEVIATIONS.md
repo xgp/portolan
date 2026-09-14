@@ -9,6 +9,9 @@ security boundary or produced something that cannot work.
 Nothing here reduces a security boundary described in the spec. Three items (D5, D6, D7)
 _strengthen_ boundaries the spec leaves open.
 
+Items are grouped by theme rather than numbered in order; the identifiers are stable
+references used from code comments and commit messages.
+
 ---
 
 ## Security findings in the spec itself
@@ -34,8 +37,10 @@ _Deviation:_
 2. An auth profile may declare `allowed_hosts`. If present, the profile refuses to sign a
    request whose resolved destination host is not on that list — a second, independent
    check that survives any mistake in environment resolution.
-3. Environments defined in `config.yaml` are authoritative: `add_api` can never modify,
-   re-point, or re-credential an existing environment (`ENVIRONMENT_IMMUTABLE`).
+3. Environments defined in `config.yaml` are authoritative. An import creates an
+   environment only if none of that name exists, and the configured definition is
+   re-applied after every import — so `add_api` can never re-point or re-credential a
+   configured environment, whether the API was registered before or after startup.
 
 ### D6 — environments created from a specification must not inherit trust (**deviation/clarification**)
 
@@ -96,7 +101,7 @@ _Decision:_ `@apidevtools/json-schema-ref-parser` for `$ref` bundling and
 `@readme/openapi-parser` for OpenAPI 3.0 **and 3.1** structural validation (the original
 `swagger-parser` does not validate 3.1 properly). Both are driven with filesystem
 resolution disabled and a custom HTTP resolver wired to Portolan's SSRF-safe fetch — see
-D8. `yaml` for YAML, `ajv`/`ajv-formats` for request validation.
+D7. `yaml` for YAML, `ajv`/`ajv-formats` for request validation.
 
 ### D11 — `bundle()` not `dereference()`, and what `inspect_api` must therefore return
 
@@ -144,9 +149,10 @@ ranking model and its limits. The ranking fixtures required by §47 are real.
 _Spec:_ §17/§18 show `"score": 0.94`.
 
 _Clarification:_ SQLite's `bm25()` returns an unbounded negative number where more
-negative is better. Portolan maps it monotonically into `(0, 1]` **relative to the current
-result set**. Scores are comparable within one response and are not an absolute relevance
-measure; the README says so.
+negative is better. Portolan maps it monotonically into `(0, 1]` with the fixed transform
+`1 - e^(-r/4)`. The mapping does not depend on the result set, so scores are broadly
+comparable between calls — but they are a ranking aid, not a calibrated relevance
+measure. `docs/SEARCH.md` says so.
 
 ### D10 — OpenAPI 3.0 schemas are not JSON Schema
 
