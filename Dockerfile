@@ -11,9 +11,12 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
 
+# Corepack reads the pnpm version from package.json's `packageManager`, so the version
+# lives in exactly one place.
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml carries the build-script approvals (pnpm 12 errors without them).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.json tsconfig.build.json ./

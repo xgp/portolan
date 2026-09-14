@@ -299,6 +299,11 @@ pnpm test
 pnpm build
 ```
 
+The pnpm version is pinned by `packageManager` in `package.json`, and `pnpm-workspace.yaml`
+records which dependencies may run install scripts. pnpm 12 also enforces a minimum
+release age on dependencies: a package published in the last day is refused, so a brand
+new release has to wait a day (or be pinned to an older version) before it can be locked.
+
 | Command                 |                                                                     |
 | ----------------------- | ------------------------------------------------------------------- |
 | `pnpm test:unit`        | pure logic: identifiers, serialization, validation, policy, ranking |
