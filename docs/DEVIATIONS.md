@@ -241,3 +241,17 @@ pointing at a half-written version.
 | Retries                     | None, for any method (§48). `Retry-After` is surfaced to the agent verbatim in the response headers; Portolan never sleeps on it.                                                                        |
 | Request IDs                 | One ULID-ish id per MCP tool call, propagated to sandbox RPC and to every outbound HTTP call, present on every log line (§57).                                                                           |
 | `limit` clamping            | Out-of-range `limit` values are clamped to the §17/§18 maxima rather than rejected.                                                                                                                      |
+
+### D19 — duplicate `operationId` must import, not fail
+
+_Spec:_ §14 defines a fallback for duplicated `operationId`s; §16 lists "duplicate
+operationIds" as a _warning_; §52 requires a duplicate-`operationId` import fixture.
+
+_Problem:_ a duplicate `operationId` is a conformance violation, and the OpenAPI
+validator rejects the document outright — which would make three parts of the spec
+impossible to satisfy at once.
+
+_Decision:_ that specific validator finding is demoted to a warning and the import
+proceeds with `method:path` identifiers, exactly as §14 prescribes. Every other
+validation failure still rejects the document. The demotion list is a single explicit
+pattern in `src/openapi/parser.ts`, not a blanket "continue on error" mode.

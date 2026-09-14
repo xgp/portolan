@@ -1,0 +1,141 @@
+# The canonical end-to-end fixture from SPEC.md §53.
+openapi: 3.0.3
+info:
+  title: Directory Users API
+  version: '1.0.0'
+  description: >
+    User management and directory administration. Create accounts, look users up by
+    email address, enable or disable accounts, and manage the groups a user belongs to.
+servers:
+  - url: https://directory.example.com
+tags:
+  - name: Users
+    description: User account administration
+  - name: Groups
+    description: Group membership
+paths:
+  /users:
+    get:
+      operationId: users.list
+      summary: Find users by email or name
+      description: >
+        Search the user directory. Supply an email address to look a single user up by
+        email, or omit it to list every user. Returns account records including the
+        enabled flag.
+      tags: [Users]
+      parameters:
+        - name: email
+          in: query
+          description: Look a user up by their exact email address
+          schema:
+            type: string
+        - name: enabled
+          in: query
+          description: Filter by whether the account is enabled or disabled
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Matching users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The user identifier
+        schema:
+          type: string
+    put:
+      operationId: users.update
+      summary: Update a user, for example to disable or enable the account
+      description: >
+        Replace a user record. Set the enabled property to false to disable and
+        deactivate an account, or true to re-enable it.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: No such user
+    delete:
+      operationId: users.delete
+      summary: Permanently delete a user account
+      tags: [Users]
+      responses:
+        '204':
+          description: Deleted
+    get:
+      operationId: users.get
+      summary: Get one user by identifier
+      tags: [Users]
+      responses:
+        '200':
+          description: The user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /users/{id}/groups:
+    get:
+      operationId: users.groups.list
+      summary: List the groups a user belongs to
+      tags: [Groups]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          description: The user email address
+        name:
+          type: string
+        enabled:
+          type: boolean
+          description: Whether the account is enabled; false means the user is disabled
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string

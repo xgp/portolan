@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: No Operation Ids API
+  version: '1.0.0'
+servers:
+  - url: https://noids.example.com
+paths:
+  /widgets:
+    get:
+      summary: List widgets
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Create a widget
+      responses:
+        '201':
+          description: Created
+  /widgets/{id}:
+    delete:
+      summary: Delete a widget
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted

@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: External Ref API
+  version: '1.0.0'
+servers:
+  - url: https://external.example.com
+paths:
+  /items:
+    get:
+      operationId: listItems
+      summary: List items
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: 'https://specs.example.com/item.json'

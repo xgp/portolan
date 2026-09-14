@@ -1,0 +1,52 @@
+openapi: 3.1.0
+info:
+  title: Petstore API 3.1
+  version: '2.0.0'
+  description: OpenAPI 3.1 flavour of the petstore, used to prove 3.1 support.
+servers:
+  - url: https://petstore31.example.com
+paths:
+  /pets:
+    get:
+      operationId: listPets31
+      summary: List pets
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+  /pets/{petId}:
+    put:
+      operationId: replacePet31
+      summary: Replace a pet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+      responses:
+        '200':
+          description: OK
+components:
+  schemas:
+    Pet:
+      type: object
+      properties:
+        id:
+          type: string
+        # 3.1 uses a JSON Schema type union rather than `nullable`.
+        nickname:
+          type: [string, 'null']
+        parent:
+          $ref: '#/components/schemas/Pet'

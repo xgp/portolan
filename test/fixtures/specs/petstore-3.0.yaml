@@ -1,0 +1,121 @@
+openapi: 3.0.3
+info:
+  title: Petstore YAML API
+  version: 1.2.3
+  description: Manage pets, their owners and store inventory.
+servers:
+  - url: https://petstore.example.com/api/v3
+tags:
+  - name: pets
+  - name: store
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      description: Returns every pet, optionally filtered by status.
+      tags:
+        - pets
+      parameters:
+        - name: status
+          in: query
+          description: Filter by pet status
+          schema:
+            type: string
+            enum:
+              - available
+              - pending
+              - sold
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+    post:
+      operationId: createPet
+      summary: Create a pet
+      tags:
+        - pets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pet'
+      responses:
+        '201':
+          description: Created
+  /pets/{petId}:
+    parameters:
+      - name: petId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getPet
+      summary: Get a pet by ID
+      tags:
+        - pets
+      responses:
+        '200':
+          description: A pet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        '404':
+          description: Not found
+    delete:
+      operationId: deletePet
+      summary: Delete a pet
+      tags:
+        - pets
+      deprecated: true
+      responses:
+        '204':
+          description: Deleted
+  /store/inventory:
+    get:
+      operationId: getInventory
+      summary: Returns pet inventories by status
+      tags:
+        - store
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      name: api_key
+      in: header
+  schemas:
+    Pet:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: The pet name
+        status:
+          type: string
+          enum:
+            - available
+            - pending
+            - sold
+        tag:
+          type: string
+          nullable: true

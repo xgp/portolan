@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: File Ref API
+  version: '1.0.0'
+servers:
+  - url: https://fileref.example.com
+paths:
+  /x:
+    get:
+      operationId: getX
+      summary: Get X
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: 'file:///etc/passwd'

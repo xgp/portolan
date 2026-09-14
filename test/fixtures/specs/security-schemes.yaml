@@ -1,0 +1,46 @@
+openapi: 3.0.3
+info:
+  title: Secured API
+  version: '1.0.0'
+  description: Declares several security schemes so inspect_api can report them.
+servers:
+  - url: https://secure.example.com
+security:
+  - bearerAuth: []
+paths:
+  /me:
+    get:
+      operationId: getMe
+      summary: Get the current principal
+      responses:
+        '200':
+          description: OK
+  /admin:
+    get:
+      operationId: getAdmin
+      summary: Admin only
+      security:
+        - oauth2: [admin]
+      responses:
+        '200':
+          description: OK
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    basicAuth:
+      type: http
+      scheme: basic
+    oauth2:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://secure.example.com/oauth/token
+          scopes:
+            admin: Administrative access

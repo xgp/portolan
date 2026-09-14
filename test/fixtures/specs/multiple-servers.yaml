@@ -1,0 +1,22 @@
+openapi: 3.0.3
+info:
+  title: Multi Server API
+  version: '1.0.0'
+servers:
+  - url: https://{region}.api.example.com/{version}
+    variables:
+      region:
+        default: eu
+        enum: [eu, us]
+      version:
+        default: v2
+  - url: https://backup.api.example.com
+  - url: /relative-only
+paths:
+  /ping:
+    get:
+      operationId: ping
+      summary: Ping
+      responses:
+        '200':
+          description: OK

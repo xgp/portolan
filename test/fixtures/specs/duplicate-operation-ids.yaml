@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: Duplicate Operation Ids API
+  version: '1.0.0'
+servers:
+  - url: https://dupes.example.com
+paths:
+  /a:
+    get:
+      operationId: getThing
+      summary: Get thing A
+      responses:
+        '200':
+          description: OK
+  /b:
+    get:
+      operationId: getThing
+      summary: Get thing B
+      responses:
+        '200':
+          description: OK
+  /c:
+    get:
+      operationId: uniqueThing
+      summary: Get thing C
+      responses:
+        '200':
+          description: OK
