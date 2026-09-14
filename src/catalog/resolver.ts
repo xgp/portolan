@@ -74,6 +74,11 @@ export async function bundleDocument(
   baseUri?: string,
 ): Promise<OpenApiDocument> {
   const seen = new Set<string>();
+  // json-schema-ref-parser wraps whatever a resolver throws in its own ResolverError,
+  // which would turn a policy refusal into a generic "invalid document". Capture the
+  // original so the caller still sees NETWORK_DESTINATION_BLOCKED and knows this was a
+  // policy decision rather than a malformed specification.
+  let policyFailure: PortolanError | undefined;
 
   const httpResolver = {
     order: 1,
@@ -86,8 +91,13 @@ export async function bundleDocument(
         );
       }
       seen.add(file.url);
-      const fetched = await fetchSpec(file.url, options);
-      return fetched.text;
+      try {
+        const fetched = await fetchSpec(file.url, options);
+        return fetched.text;
+      } catch (error) {
+        if (PortolanError.is(error)) policyFailure ??= error;
+        throw error;
+      }
     },
   };
 
@@ -102,6 +112,7 @@ export async function bundleDocument(
     return bundled;
   } catch (error) {
     if (PortolanError.is(error)) throw error;
+    if (policyFailure) throw policyFailure;
     const message = error instanceof Error ? error.message : String(error);
     throw new PortolanError('SPEC_INVALID', `Could not resolve document references: ${message}`);
   }

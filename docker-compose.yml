@@ -1,0 +1,30 @@
+# Portolan via Docker (SPEC.md §55).
+#
+# Secrets are never baked into the image or committed here: they come from the shell
+# environment (or a .env file you do not commit) and are referenced by name from
+# config.yaml.
+
+services:
+  portolan:
+    build: .
+    image: portolan:0.1.0
+    # stdio is the default transport; for a container the HTTP transport is what you
+    # usually want, since an MCP client cannot attach to a container's stdin.
+    command: ['serve', '--transport', 'http', '--host', '0.0.0.0', '--port', '8765']
+    ports:
+      - '127.0.0.1:8765:8765'
+    volumes:
+      - ./portolan-data:/data
+    environment:
+      PORTOLAN_CONFIG: /data/config.yaml
+      # Binding a non-loopback interface requires a token; see docs/DEVIATIONS.md D17.
+      PORTOLAN_HTTP_TOKEN: ${PORTOLAN_HTTP_TOKEN:?set PORTOLAN_HTTP_TOKEN before starting}
+      # Credentials for your APIs, referenced by name from config.yaml:
+      # STRIPE_API_KEY: ${STRIPE_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'node', '/app/dist/cli/index.js', 'doctor']
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 10s

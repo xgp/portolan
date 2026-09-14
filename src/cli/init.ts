@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { defaultConfigPath, EXAMPLE_CONFIG, expandPath, loadConfig } from '../config/config.js';
+import { PortolanError } from '../errors/errors.js';
 
 export interface InitResult {
   configPath: string;
@@ -22,7 +23,17 @@ export function runInit(explicitPath?: string): InitResult {
   const { config } = loadConfig(configPath);
   const databasePath = expandPath(config.database.path);
   const databaseDirectory = dirname(databasePath);
-  mkdirSync(databaseDirectory, { recursive: true });
+  try {
+    mkdirSync(databaseDirectory, { recursive: true });
+  } catch (cause) {
+    throw new PortolanError(
+      'CONFIG_INVALID',
+      `Could not create the data directory ${databaseDirectory} for database.path in ${configPath}: ${
+        cause instanceof Error ? cause.message : String(cause)
+      }`,
+      { directory: databaseDirectory, config: configPath },
+    );
+  }
 
   return { configPath, configCreated, databaseDirectory };
 }
