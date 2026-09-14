@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createTestCatalog, readSpec } from '../fixtures/helpers.js';
-import { assertUrlAllowed, resolveAllowedAddress } from '../../src/net/safe-fetch.js';
+import { assertUrlAllowed, resolveAllowedAddresses } from '../../src/net/safe-fetch.js';
 import type { NetworkPolicyOptions } from '../../src/net/address-policy.js';
 
 const defaultPolicy: NetworkPolicyOptions = {
@@ -67,12 +67,12 @@ describe('address restrictions (SPEC.md §12, §54)', () => {
     ['IPv4-mapped metadata', '[::ffff:169.254.169.254]'],
   ])('blocks a literal %s address', async (_label, host) => {
     await expect(
-      resolveAllowedAddress(host.replace(/^\[|\]$/g, ''), defaultPolicy),
+      resolveAllowedAddresses(host.replace(/^\[|\]$/g, ''), defaultPolicy),
     ).rejects.toThrow(/blocked/);
   });
 
   it('blocks localhost by name', async () => {
-    await expect(resolveAllowedAddress('localhost', defaultPolicy)).rejects.toThrow(/blocked/);
+    await expect(resolveAllowedAddresses('localhost', defaultPolicy)).rejects.toThrow(/blocked/);
   });
 
   it('still blocks the metadata service when private addresses are permitted', async () => {
@@ -82,7 +82,7 @@ describe('address restrictions (SPEC.md §12, §54)', () => {
       allowHttp: true,
       allowedHosts: [],
     };
-    await expect(resolveAllowedAddress('169.254.169.254', permissive)).rejects.toThrow(
+    await expect(resolveAllowedAddresses('169.254.169.254', permissive)).rejects.toThrow(
       /metadata addresses are always blocked/,
     );
   });

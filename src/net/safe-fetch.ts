@@ -92,16 +92,24 @@ export function assertUrlAllowed(rawUrl: string, policy: NetworkPolicyOptions): 
   return url;
 }
 
+export interface PinnedAddress {
+  address: string;
+  family: 4 | 6;
+}
+
 /**
- * Resolve a hostname and return the addresses that pass policy.
- * Every returned address is checked: if any resolved address is refused the whole
- * destination is refused, so a record mixing a public and a private answer cannot be
- * used to smuggle a connection through.
+ * Resolve a hostname and return every address that passes policy.
+ *
+ * Every resolved address is checked, and if *any* is refused the whole destination is
+ * refused — a record mixing a public and a private answer cannot be used to smuggle a
+ * connection through. All validated addresses are returned rather than just the first,
+ * so the connection keeps its IPv6/IPv4 fallback (a host with an unroutable AAAA record
+ * still connects over IPv4) without ever reaching an address that was not checked.
  */
-export async function resolveAllowedAddress(
+export async function resolveAllowedAddresses(
   hostname: string,
   policy: NetworkPolicyOptions,
-): Promise<{ address: string; family: 4 | 6 }> {
+): Promise<PinnedAddress[]> {
   const literal = isIP(hostname.replace(/^\[|\]$/g, ''));
   if (literal) {
     const address = hostname.replace(/^\[|\]$/g, '');
@@ -112,7 +120,7 @@ export async function resolveAllowedAddress(
         category: decision.category,
       });
     }
-    return { address, family: literal === 4 ? 4 : 6 };
+    return [{ address, family: literal === 4 ? 4 : 6 }];
   }
 
   let records: { address: string; family: number }[];
@@ -138,22 +146,55 @@ export async function resolveAllowedAddress(
     }
   }
 
-  const first = records[0]!;
-  return { address: first.address, family: first.family === 6 ? 6 : 4 };
+  return records.map((record) => ({
+    address: record.address,
+    family: record.family === 6 ? (6 as const) : (4 as const),
+  }));
 }
 
 /** Build a dispatcher that can only ever connect to `address`. */
-function pinnedAgent(address: string, family: 4 | 6, timeoutMs: number): Agent {
+/**
+ * The `lookup` shape `net.connect` expects.
+ *
+ * Node calls it in one of two ways depending on the options it was given: with
+ * `all: true` (the default since the happy-eyeballs `autoSelectFamily` behaviour landed)
+ * it wants an **array** of `{ address, family }`; otherwise it wants
+ * `(err, address, family)`. Answering in the wrong shape fails the connection with
+ * `ERR_INVALID_IP_ADDRESS`, so both are handled.
+ *
+ * Note that `net.connect` skips `lookup` entirely when the host is already an IP
+ * literal — only a real hostname reaches this function, which is exactly the DNS
+ * rebinding case it exists to close.
+ */
+export type PinnedLookup = (
+  hostname: string,
+  options: { all?: boolean; family?: number },
+  callback: (
+    err: Error | null,
+    addressOrAddresses: string | PinnedAddress[],
+    family?: number,
+  ) => void,
+) => void;
+
+export function createPinnedLookup(addresses: readonly PinnedAddress[]): PinnedLookup {
+  return (_hostname, options, callback) => {
+    if (options?.all === true) {
+      callback(
+        null,
+        addresses.map((entry) => ({ ...entry })),
+      );
+      return;
+    }
+    const first = addresses[0]!;
+    callback(null, first.address, first.family);
+  };
+}
+
+function pinnedAgent(addresses: readonly PinnedAddress[], timeoutMs: number): Agent {
   return new Agent({
     connect: {
       timeout: timeoutMs,
-      lookup: (
-        _hostname: string,
-        _options: unknown,
-        callback: (err: Error | null, address: string, family: number) => void,
-      ) => {
-        callback(null, address, family);
-      },
+      lookup: createPinnedLookup(addresses) as never,
     },
     headersTimeout: timeoutMs,
     bodyTimeout: timeoutMs,
@@ -257,8 +298,8 @@ export async function safeFetch(
       });
     }
 
-    const pinned = await resolveAllowedAddress(currentUrl.hostname, options.policy);
-    const agent = pinnedAgent(pinned.address, pinned.family, remaining);
+    const pinned = await resolveAllowedAddresses(currentUrl.hostname, options.policy);
+    const agent = pinnedAgent(pinned, remaining);
     try {
       const response = await undiciRequest(currentUrl, {
         method: method as 'GET',

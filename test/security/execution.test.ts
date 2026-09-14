@@ -152,6 +152,43 @@ describe('redirects (SPEC.md §49, §54)', () => {
   });
 });
 
+// Regression: every other test uses an IP literal, and net.connect skips a custom
+// `lookup` for literals — so the pinning path never ran. A hostname is what exercises it.
+describe('DNS resolution and connection pinning (docs/DEVIATIONS.md D7)', () => {
+  it('completes a request whose base URL is a hostname, not an IP literal', async () => {
+    const h = await setup();
+    const port = new URL(h.server.url).port;
+    // Re-point the environment at the same server via a name that must be resolved.
+    h.app.catalog['environments'].upsert({
+      apiId: h.apiId,
+      name: 'default',
+      baseUrl: `http://localhost:${port}`,
+      authProfile: null,
+      isDefault: true,
+      allowMutations: false,
+      source: 'config',
+    });
+
+    const result = await h.app.caller.call({ apiId: h.apiId, operationId: 'users.list' }, context);
+    expect(result.response.status).toBe(200);
+    expect(result.request.url).toContain('localhost');
+    expect(h.server.requests.at(-1)?.path).toBe('/users');
+  });
+
+  it('refuses a hostname that resolves to a blocked address', async () => {
+    // `localhost` resolves to loopback, which the shipped defaults block.
+    const { resolveAllowedAddresses } = await import('../../src/net/safe-fetch.js');
+    await expect(
+      resolveAllowedAddresses('localhost', {
+        allowPrivateAddresses: false,
+        allowLoopback: false,
+        allowHttp: false,
+        allowedHosts: [],
+      }),
+    ).rejects.toMatchObject({ code: 'NETWORK_DESTINATION_BLOCKED' });
+  });
+});
+
 describe('call_api cannot address an arbitrary URL (SPEC.md §30, §60)', () => {
   it('offers no input for a destination', async () => {
     const h = await setup();

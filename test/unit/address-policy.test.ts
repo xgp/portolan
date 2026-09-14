@@ -129,3 +129,52 @@ describe('host allowlist', () => {
     expect(hostMatches('a.b.example.com', '*.example.com')).toBe(true);
   });
 });
+
+describe('pinned DNS lookup (docs/DEVIATIONS.md D7)', () => {
+  it('answers in both shapes net.connect may ask for', async () => {
+    const { createPinnedLookup } = await import('../../src/net/safe-fetch.js');
+    const lookup = createPinnedLookup([{ address: '93.184.216.34', family: 4 }]);
+
+    // Happy-eyeballs form: net.connect passes all:true and expects an array. Answering
+    // with the scalar form here fails the connection with ERR_INVALID_IP_ADDRESS.
+    let all: unknown;
+    lookup('example.com', { all: true }, (_err, value) => (all = value));
+    expect(all).toEqual([{ address: '93.184.216.34', family: 4 }]);
+
+    // Classic form.
+    let address: unknown;
+    let family: unknown;
+    lookup('example.com', {}, (_err, value, fam) => {
+      address = value;
+      family = fam;
+    });
+    expect(address).toBe('93.184.216.34');
+    expect(family).toBe(4);
+  });
+
+  it('returns every validated address so IPv6/IPv4 fallback still works', async () => {
+    const { createPinnedLookup } = await import('../../src/net/safe-fetch.js');
+    const lookup = createPinnedLookup([
+      { address: '::1', family: 6 },
+      { address: '127.0.0.1', family: 4 },
+    ]);
+    let all: unknown;
+    lookup('localhost', { all: true }, (_err, value) => (all = value));
+    // Pinning to only the first address would strand a host whose AAAA record is
+    // unroutable, which is common on IPv4-only networks.
+    expect(all).toEqual([
+      { address: '::1', family: 6 },
+      { address: '127.0.0.1', family: 4 },
+    ]);
+  });
+
+  it('ignores the hostname it is handed and always returns the validated address', async () => {
+    const { createPinnedLookup } = await import('../../src/net/safe-fetch.js');
+    const lookup = createPinnedLookup([{ address: '10.1.2.3', family: 4 }]);
+    let result: unknown;
+    // Even if something later in the stack re-resolves a different name, the socket can
+    // only go to the address that was validated.
+    lookup('attacker-controlled.example.com', { all: true }, (_err, value) => (result = value));
+    expect(result).toEqual([{ address: '10.1.2.3', family: 4 }]);
+  });
+});
