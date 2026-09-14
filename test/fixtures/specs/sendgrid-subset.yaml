@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: SendGrid API
+  version: '3.0.0'
+  description: Email delivery, suppression management and marketing campaign administration.
+servers:
+  - url: https://api.sendgrid.com/v3
+paths:
+  /suppression/bounces:
+    get:
+      operationId: listBounces
+      summary: Retrieve all bounces
+      description: Retrieve the email addresses that have bounced and are suppressed.
+      tags: [Suppressions]
+      responses:
+        '200': { description: OK }
+  /mail/send:
+    post:
+      operationId: sendMail
+      summary: Send an email
+      tags: [Mail Send]
+      responses:
+        '202': { description: Accepted }

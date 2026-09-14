@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Stripe API
+  version: '2024-01-01'
+  description: Payments, customers, subscriptions and invoices.
+servers:
+  - url: https://api.stripe.com
+paths:
+  /v1/subscriptions:
+    get:
+      operationId: listSubscriptions
+      summary: List subscriptions
+      description: Returns a list of subscriptions, optionally filtered by status such as past_due.
+      tags: [Subscriptions]
+      responses:
+        '200': { description: OK }
+  /v1/invoices:
+    get:
+      operationId: listInvoices
+      summary: List invoices
+      tags: [Invoices]
+      responses:
+        '200': { description: OK }

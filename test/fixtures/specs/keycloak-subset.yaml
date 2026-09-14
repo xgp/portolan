@@ -1,0 +1,168 @@
+# A realistic subset of the Keycloak Admin REST API, used for the ranking cases in
+# SPEC.md §47. Summaries and descriptions are kept close to the real document so the
+# ranking tests exercise text an agent would actually meet.
+openapi: 3.0.3
+info:
+  title: Keycloak Admin REST API
+  version: '26.0.0'
+  description: >
+    Administration API for Keycloak realms: users, groups, roles, clients, identity
+    providers and their certificates.
+servers:
+  - url: https://keycloak.example.com
+paths:
+  /admin/realms/{realm}/users:
+    get:
+      operationId: UsersResource_getUsers
+      summary: Get users
+      description: >
+        Returns a stream of users, filtered according to query parameters. Supply email
+        to search for a user by email address, or username for an exact username match.
+      tags: [Users]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+        - name: email
+          in: query
+          description: A String contained in email, or the complete email, if param exact is true
+          schema: { type: string }
+        - name: exact
+          in: query
+          schema: { type: boolean }
+        - name: enabled
+          in: query
+          description: Boolean representing if user is enabled or not
+          schema: { type: boolean }
+      responses:
+        '200': { description: OK }
+  /admin/realms/{realm}/users/{user-id}:
+    parameters:
+      - name: realm
+        in: path
+        required: true
+        schema: { type: string }
+      - name: user-id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: UsersResource_getUser
+      summary: Get representation of the user
+      tags: [Users]
+      responses:
+        '200': { description: OK }
+    put:
+      operationId: UsersResource_updateUser
+      summary: Update the user
+      description: >
+        Update the user representation. Set enabled to false to disable the user account
+        and prevent the user from logging in, or true to enable it again.
+      tags: [Users]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  description: Whether the user is enabled or disabled
+      responses:
+        '204': { description: No Content }
+    delete:
+      operationId: UsersResource_deleteUser
+      summary: Delete the user
+      tags: [Users]
+      responses:
+        '204': { description: No Content }
+  /admin/realms/{realm}/users/{user-id}/sessions:
+    get:
+      operationId: UsersResource_getSessions
+      summary: Get sessions associated with the user
+      tags: [Users]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+        - name: user-id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /admin/realms/{realm}/clients/{client-uuid}:
+    put:
+      operationId: ClientsResource_updateClient
+      summary: Update the client
+      tags: [Clients]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+        - name: client-uuid
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: No Content }
+  /admin/realms/{realm}/identity-provider/instances/{alias}:
+    get:
+      operationId: IdentityProvidersResource_getIdentityProvider
+      summary: Get the identity provider
+      tags: [Identity Providers]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+        - name: alias
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /admin/realms/{realm}/identity-provider/instances/{alias}/export:
+    get:
+      operationId: IdentityProvidersResource_export
+      summary: Export public broker configuration for identity provider
+      tags: [Identity Providers]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+        - name: alias
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /admin/realms/{realm}/keys:
+    get:
+      operationId: KeyResource_getKeyMetadata
+      summary: List realm keys and certificates
+      description: Returns the active keys and certificates for the realm.
+      tags: [Key]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
+  /admin/realms/{realm}/identity-provider/import-config:
+    post:
+      operationId: IdentityProvidersResource_importFrom
+      summary: Import identity provider configuration from a SAML descriptor or certificate
+      tags: [Identity Providers]
+      parameters:
+        - name: realm
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK }
