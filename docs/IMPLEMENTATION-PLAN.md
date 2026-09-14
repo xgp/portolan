@@ -33,3 +33,8 @@ test/integration/   real HTTP against the fixture server; real SQLite
 test/security/      §54 — every case must fail closed
 test/e2e/           real MCP client over stdio against the built server
 ```
+
+## After the phases
+
+`docs/GETTING-STARTED.md` is the user-facing walkthrough, written against the finished
+build and verified end to end against a live public API.

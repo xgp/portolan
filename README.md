@@ -72,6 +72,9 @@ behalf — applying the same validation, policy and credentials as `call_api`.
 
 ## Install
 
+**New here? [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) is a five-minute
+walkthrough**: install, connect it to Claude, add a real public API, and make a call.
+
 Requires **Node.js 24 or newer**. [Deno](https://deno.land) is needed only for
 `run_api_code`; the other five tools work without it.
 
@@ -310,6 +313,8 @@ Deno must be installed for the sandbox suites.
 
 ## Documentation
 
+- [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) — install it, connect it to Claude,
+  add an API, make a call
 - [SPEC.md](SPEC.md) — the product and architectural specification
 - [docs/DEVIATIONS.md](docs/DEVIATIONS.md) — where the implementation departs from the
   spec, and why, including the three places it tightens a boundary the spec left open
