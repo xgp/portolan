@@ -38,6 +38,7 @@ function writeConfig(config: Record<string, unknown>): string {
     stringifyYaml({
       database: { path: join(dataDir, 'p.db') },
       logging: { level: 'silent' },
+      enrichment: { agent: 'off' },
       ...config,
     }),
     'utf8',

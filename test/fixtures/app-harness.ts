@@ -31,6 +31,8 @@ export async function createAppHarness(options: HarnessOptions = {}): Promise<Ap
       database: { path: ':memory:' },
       network: { allow_loopback: true, allow_http: true },
       logging: { level: 'silent' },
+      // Never start a real coding agent from the test suite (docs/DEVIATIONS.md D24).
+      enrichment: { agent: 'off' },
       ...options.config,
       environments: [
         {

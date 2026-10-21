@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInit } from '../../src/cli/init.js';
 import { runDoctor, formatDoctorReport, doctorExitCode } from '../../src/cli/doctor.js';
+import { formatEnrichmentRun, runEnrich } from '../../src/cli/enrich.js';
+import { createPortolan } from '../../src/app.js';
+import { parseConfig } from '../../src/config/config.js';
+import { createSilentLogger } from '../../src/logging.js';
+import { FIXTURE_DIR, readSpec } from '../fixtures/helpers.js';
 
 let dir: string | undefined;
 
@@ -133,5 +138,60 @@ describe('portolan doctor', () => {
     expect(check.detail).toContain('allow_private_addresses');
     // A relaxed policy is a warning, not a failure.
     expect(report.ok).toBe(true);
+  });
+});
+
+describe('portolan enrich (docs/DEVIATIONS.md D24)', () => {
+  const fakeAgent = (mode: string) =>
+    `    claude:\n      command: ${process.execPath}\n      args: [${join(FIXTURE_DIR, 'fake-acp-agent.mjs')}, --mode=${mode}]\n`;
+
+  async function catalogWithUsers(base: string, mode = 'describe'): Promise<string> {
+    const configPath = join(base, 'config.yaml');
+    const database = join(base, 'p.db');
+    writeFileSync(
+      configPath,
+      `database:\n  path: ${database}\nlogging:\n  level: silent\nenrichment:\n  agent: claude\n  agents:\n${fakeAgent(mode)}`,
+    );
+    // Register the API with enrichment off, as if no agent had been installed yet.
+    const app = createPortolan({
+      config: parseConfig({ database: { path: database }, enrichment: { agent: 'off' } }, 'test'),
+      logger: createSilentLogger(),
+    });
+    await app.catalog.addApi({ specContent: readSpec('users-api.yaml'), apiId: 'users' });
+    app.close();
+    return configPath;
+  }
+
+  it('describes every API with work pending, then has nothing left to do', async () => {
+    const configPath = await catalogWithUsers(tmp());
+    const runs = await runEnrich({ configPath, apiIds: [] });
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ api_id: 'users', agent: 'claude', operations_pending: 0 });
+    expect(formatEnrichmentRun(runs[0]!)).toMatch(
+      /^users: \d+ operation\(s\) described by claude and the API summarised; \d+ finding\(s\); 0 operation\(s\) still pending$/,
+    );
+    expect(await runEnrich({ configPath, apiIds: [] })).toEqual([]);
+  });
+
+  it('refuses when no agent can run, and names unknown APIs', async () => {
+    const base = tmp();
+    const configPath = join(base, 'config.yaml');
+    writeFileSync(
+      configPath,
+      `database:\n  path: ${join(base, 'p.db')}\nlogging:\n  level: silent\nenrichment:\n  agent: claude\n  agents:\n    claude:\n      command: portolan-no-such-acp-adapter\n`,
+    );
+    await expect(runEnrich({ configPath, apiIds: [] })).rejects.toThrow(/No ACP adapter/);
+
+    const working = await catalogWithUsers(tmp());
+    await expect(runEnrich({ configPath: working, apiIds: ['nope'] })).rejects.toMatchObject({
+      code: 'API_NOT_FOUND',
+    });
+  });
+
+  it('is reported by doctor', async () => {
+    const configPath = await catalogWithUsers(tmp());
+    const report = await runDoctor(configPath);
+    expect(report.checks.find((c) => c.name === 'enrichment')).toMatchObject({ status: 'ok' });
+    expect(report.checks.find((c) => c.name === 'lint')).toMatchObject({ status: 'ok' });
   });
 });

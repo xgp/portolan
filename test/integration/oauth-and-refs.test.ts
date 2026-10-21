@@ -106,6 +106,7 @@ async function setupOAuth(profileOverrides: Record<string, unknown> = {}) {
       database: { path: ':memory:' },
       network: { allow_loopback: true, allow_http: true },
       logging: { level: 'silent' },
+      enrichment: { agent: 'off' },
       auth_profiles: {
         partner: {
           type: 'oauth2_client_credentials',

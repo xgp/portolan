@@ -261,3 +261,220 @@ _Decision:_ that specific validator finding is demoted to a warning and the impo
 proceeds with `method:path` identifiers, exactly as §14 prescribes. Every other
 validation failure still rejects the document. The demotion list is a single explicit
 pattern in `src/openapi/parser.ts`, not a blanket "continue on error" mode.
+
+---
+
+## Correcting specifications ([issue #1](https://github.com/xgp/portolan/issues/1))
+
+§3.3 makes the OpenAPI document authoritative, and documents in the wild are wrong often
+enough to matter: undeclared path parameters, schemas that do not match real responses,
+missing query parameters. The spec has no feedback path for that. An agent that notices
+can only work around the flaw on every call, and a document that a strict validator
+rejects for a trivial reason cannot be imported at all. D20–D22 add that feedback path
+without changing the six-tool surface.
+
+### D20 — `add_api` corrects a registered document (**addition**)
+
+_Spec:_ §16 defines `add_api` as import-only, and it requires a document.
+
+_Addition:_ `add_api` takes `issue {title, description}`, `patches` (RFC 6902 JSON
+Patch), `revert_corrections` and `upstream_repo`. When an `api_id` is given with no
+`spec_url` or `spec_content`, Portolan corrects the registered API in place. It re-derives
+the document from the copy it stored on import (`api_versions.source_spec_json`) and
+creates a new version with `status: "corrected"`.
+
+The stored document is always derived, never edited in place: the document as received,
+then the D21 repairs, then every active agent correction in the order it was made.
+Corrections live in `spec_corrections`, keyed by API, so they outlive any one version.
+
+- A re-import from upstream replays every correction. One that no longer applies (a
+  `test` operation fails, or its target has moved) is marked `stale` with a warning
+  rather than failing the import, since the upstream document has probably fixed it.
+- A patch that does not apply when submitted, or that yields an invalid document, is
+  refused with `SPEC_PATCH_INVALID` (a code added to §25's list), and nothing changes.
+- A replayed correction can break validation of a new upstream document. Portolan then
+  re-applies the corrections one at a time, validating after each, and marks the
+  offenders `stale`. Each correction costs one validation, so this only runs when the
+  whole document has already failed.
+- An identical resubmission is the same correction (it is fingerprinted by the patch),
+  not a duplicate.
+- Returning to a document the API has already had, by reverting a correction or by
+  re-importing an older upstream version, reuses that version instead of violating the
+  unique `(api_id, spec_hash)` index.
+- An `issue` without `patches` records a flaw Portolan cannot fix (`reported`) so it can
+  still be raised upstream.
+
+_Why `add_api` and not a seventh tool:_ §3.2 is explicit that the surface is six tools,
+and `add_api` already owns the content of the library.
+
+_Security:_ this adds no capability. `add_api(replace=true)` already lets an agent
+replace a document wholesale, and nothing in a document can widen trust: base URLs come
+from environments, credentials from configuration, mutation rights from configuration
+(D5, D6).
+
+### D21 — structural flaws with one correct fix are repaired on import (**addition**, extends D19)
+
+_Spec:_ §10 requires validation and rejects invalid documents. D19 already demotes
+duplicate `operationId`s to a warning.
+
+_Problem:_ a common class of validator failure has exactly one reasonable fix, and
+refusing the whole document over it helps nobody.
+
+_Decision:_ `src/openapi/repairs.ts` repairs, before validation:
+
+| Flaw                                                           | Repair                                 |
+| -------------------------------------------------------------- | -------------------------------------- |
+| path variable `{x}` with no `in: path` declaration             | declare it as a required string        |
+| one undeclared variable plus one non-matching declaration      | rename the declaration                 |
+| `in: path` declaration with no matching `{x}` in the path      | remove it (it could never be sent)     |
+| path parameter without `required: true` (inline or via `$ref`) | set `required: true` at its definition |
+| OpenAPI 3.0 operation with no `responses`                      | add a `default` response               |
+| `info.version` missing                                         | `"unspecified"`                        |
+
+Anything that needs a judgment about what the API actually does is left to the validator
+to reject. Each repair is recorded in `spec_corrections` (`origin = 'portolan'`) with the
+JSON Patch that makes it, reported in the `add_api` result under `corrections`, and
+marked `resolved` once an upstream version no longer needs it. Repairs are recomputed on
+every import, never replayed.
+
+### D22 — flaws are raised with the upstream project (**addition**)
+
+_Decision:_ after an import commits, Portolan raises every correction not yet raised,
+grouped as one issue per agent correction plus one issue for all new D21 repairs. The
+upstream repository comes from, in order: `feedback.repositories` in config, the
+`upstream_repo` given to `add_api` (stored on the API), the GitHub URL the document was
+fetched from, then `info.contact.url`, `externalDocs.url` or `info.x-origin` in the
+document.
+
+`feedback.upstream_issues` decides what happens:
+
+- `draft` (default): the result carries a prefilled `github.com/<repo>/issues/new` link
+  for the user or agent to open. No outbound request is made.
+- `file`: Portolan files the issue itself with the token in `feedback.github.token_env`.
+- `off`: corrections stay local.
+
+When filing:
+
+1. Only repositories from **config** or from the **spec URL** are filed against. A
+   repository named by the agent or by the document's own metadata gets a draft link.
+   This is the D5 reasoning applied to the operator's GitHub token: an agent, or a
+   document an agent supplied, must not be able to aim it at a repository of its choice.
+2. Before filing, GitHub is searched for an issue carrying the same fingerprint (printed
+   in the issue body), so separate installations do not file duplicates. A match is
+   linked as `existing`.
+3. At most `max_issues_per_repo_per_day` (default 5) issues are filed per repository.
+   After that the result is `rate_limited` with a draft link.
+4. GitHub requests go through `safeFetch`, so the network policy and `allowed_hosts`
+   apply to them as to everything else.
+5. A failure is reported as `failed` with a draft link. It never fails the import.
+
+Issue bodies say they were opened automatically by Portolan. The `issue.description`
+written by an agent becomes public text, and the `add_api` schema tells the agent so.
+
+---
+
+## Linting and enrichment on import ([issue #2](https://github.com/xgp/portolan/issues/2))
+
+Search quality depends on the text a document carries (§9), and many documents carry
+little: operations with a summary and nothing else, parameters with no description. D23
+reports what is missing; D24 fills the gap for search, using a coding agent the user
+already has.
+
+### D23 — documents are linted with Spectral on import (**addition**)
+
+_Spec:_ §10 validates a document and has no lint step.
+
+_Decision:_ every new version is linted with Spectral's `oas` ruleset (`recommended`)
+before it is stored. Findings go in `lint_findings`, keyed by version, and never fail an
+import. `add_api` returns counts by severity and the ten most severe findings;
+`inspect_api` shows an operation's own errors and warnings. Rules can be turned off or
+re-graded under `lint.rules`, and `lint.enabled: false` skips the step.
+
+_Why Spectral:_ it is the JavaScript-native choice and runs in-process. Vacuum and
+Speakeasy's linter are Go binaries that would have to be installed and spawned
+separately.
+
+Two defaults differ from Spectral's own:
+
+- **Spectral's `$ref` resolver fetches `http(s):` and `file:` references itself.** That
+  would bypass the network policy (§30, D7), the size limits and the redirect checks
+  applied to every other fetch, and would read local files. Portolan gives Spectral a
+  resolver with no schemes at all. The document has already been bundled, so only local
+  references remain, and those need no resolver. A test makes sure nothing is fetched.
+- **The example-validation rules (`oas3-valid-media-example`,
+  `oas3-valid-schema-example` and their OAS 2 versions) are off.** They compile a JSON
+  Schema validator for every example. On api.github.com's 13 MB document they take 14 of
+  the 16 seconds and about 2 GB of memory. With them off, the same document lints in
+  about 2 seconds. `oas2-schema` and `oas3-schema` are off as well, because they repeat
+  what validation already checked. Each can be turned back on under `lint.rules`.
+
+A version that is reused (an unchanged re-import, or a return to an earlier document)
+keeps the findings it was stored with and is not linted again.
+
+### D24 — a local coding agent describes operations, over ACP (**deviation**)
+
+_Spec:_ §4 lists "LLM calls inside Portolan" as out of scope for the MVP.
+
+_Deviation:_ when the user has Claude Code or Codex installed and logged in, Portolan
+asks it to describe each operation, its parameters and its top-level request body fields,
+and the API as a whole. The agent may also note up to three problems per operation. The
+text goes into the search index, so a query can match words the document never used
+("remove" for an operation documented only as "delete"). It also appears in `inspect_api`
+under `generated`, attributed to the agent. Portolan calls no model API and holds no
+model credentials: it drives the user's own agent through the
+[Agent Client Protocol](https://agentclientprotocol.com), as a client, via the official
+adapters `claude-agent-acp` and `codex-acp`.
+
+- `enrichment.agent: auto` (default) tries Claude Code, then Codex. Each is used if its
+  adapter is on `PATH`, or, failing that, if the agent's own CLI (`claude`, `codex`) is
+  and `npx` is too. The adapter is then run as `npx -y <package>@<version>`, at the
+  version pinned in `src/enrichment/acp-agent.ts` (the one tested), never `latest`. The
+  first run downloads it, a few hundred megabytes with the agent binary it bundles.
+  `enrichment.npx_fallback: false` turns this off, for machines that should not fetch
+  code at runtime. A login problem shows up as ACP's `auth_required` on the first
+  prompt; the next agent is then tried, and the failed one is skipped for 15 minutes.
+  `claude`, `codex` and `off` choose explicitly.
+- The work runs in the background after `add_api` commits. The result says
+  `queued`, `up_to_date`, `disabled` or `unavailable`, and never waits for the agent.
+  `portolan serve` resumes unfinished work at startup, and `portolan enrich` runs it in
+  the foreground.
+- Enrichments are stored in `enrichments`, keyed by a hash of the operation as stored.
+  An operation unchanged in a new version keeps its description, and a changed one is
+  described afresh. The least documented operations go first, up to
+  `max_operations_per_api` (default 200), in batches of `batch_size`.
+- The document is never modified. The specification stays authoritative (§3.3): spec
+  hashes, versions and corrections (D20) are unaffected, and agent findings are not
+  raised upstream (D22). They are leads for the calling agent to verify, and the server
+  instructions say so.
+
+_Security:_ the agent reads text taken from a third-party document, so it is treated as
+an agent that may be prompt-injected. It must be unable to act, and anything it writes
+is distrusted:
+
+1. **No capability is offered.** The client advertises no file-system or terminal
+   capability and answers every `session/request_permission` with `cancelled`.
+2. **Each agent is started with its own tools off.** Claude Code gets the Agent SDK
+   options `tools: []`, `settingSources: []` (no user or project settings, and therefore
+   no hooks or MCP servers, including Portolan itself) and `persistSession: false`.
+   Codex starts in `read-only` mode with its shell, unified exec, code mode, apps,
+   plugins, sub-agents, image tools and web search disabled, and no MCP servers. This was
+   tested against both: with these settings neither could read `/etc/hosts` when asked
+   to. Without them, Codex's read-only mode could.
+3. **A tool call ends the job.** If an agent reports a tool call anyway, the turn is
+   cancelled, its output discarded, and no further batches are sent.
+4. **The process gets only what it needs.** It runs in an empty temporary directory.
+   Its environment is built from an allowlist (`PATH`, `HOME`, locale, proxy and CA
+   settings, `ANTHROPIC_*`, `CLAUDE_*`, `OPENAI_*`, `CODEX_*`, and `npm_config_*` for
+   npx) plus any names listed
+   under `enrichment.agents.<name>.env`. Every variable named in an auth profile, the
+   HTTP transport token or the GitHub token is removed, even if it is listed.
+5. **Replies are parsed as untrusted input.** Only operations, parameters and fields
+   that were in the brief are kept. Control characters are stripped and every string is
+   capped. Generated text reaches only the local search index and `inspect_api`, both
+   clearly marked, so it is no more able to steer the calling agent than the document's
+   own descriptions already are.
+
+_Privacy:_ enrichment sends each operation's brief to the agent's model provider, under
+the user's own account with that agent. That is a new data flow, so `doctor` reports it
+and `enrichment.agent: off` disables it. Operators cataloguing documents that must not
+leave the machine should set it.

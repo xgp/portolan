@@ -9,6 +9,7 @@ import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createPortolan } from '../app.js';
 import { expandPath, loadConfig } from '../config/config.js';
+import { ADAPTERS, findExecutable } from '../enrichment/acp-agent.js';
 import { PortolanError } from '../errors/errors.js';
 import { createSilentLogger } from '../logging.js';
 import { createMcpServer } from '../mcp/server.js';
@@ -107,6 +108,44 @@ export async function runDoctor(explicitConfigPath?: string): Promise<DoctorRepo
         'fail',
         `sandbox runtime missing at ${sandbox.runtime}; re-run the build`,
       );
+    }
+
+    // --- linting and enrichment (D23, D24) ----------------------------------
+    add(
+      'lint',
+      'ok',
+      config.lint.enabled ? "Spectral's OpenAPI ruleset runs on import" : 'disabled',
+    );
+    if (!app.enricher.enabled) {
+      add('enrichment', 'ok', 'disabled');
+    } else {
+      const installed = app.enricher.candidates();
+      const choice = config.enrichment.agent;
+      if (installed.length > 0) {
+        add(
+          'enrichment',
+          'ok',
+          `${installed
+            .map((spec) => `${spec.name} (${[spec.command, ...spec.args].join(' ')})`)
+            .join(', ')} available; login is checked on first use`,
+        );
+      } else {
+        const hints = (['claude', 'codex'] as const)
+          .filter((name) => choice === 'auto' || choice === name)
+          .map((name) =>
+            findExecutable(name)
+              ? `${name} is installed but its ACP adapter is not, and npx cannot run it (npx missing or enrichment.npx_fallback off): npm install -g ${ADAPTERS[name].package.replace(/@[^@]+$/, '')}`
+              : null,
+          )
+          .filter(Boolean);
+        add(
+          'enrichment',
+          'warn',
+          hints.length > 0
+            ? hints.join('; ')
+            : 'no coding agent adapter found; operations are searchable by their own descriptions only',
+        );
+      }
     }
 
     // --- MCP initialization ------------------------------------------------

@@ -7,6 +7,8 @@ export interface ApiRecord {
   aliases: string[];
   tags: string[];
   currentVersionId: string | null;
+  /** Upstream repository (`owner/name`) supplied through add_api, if any. */
+  upstreamRepo: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,6 +22,8 @@ export interface ApiVersionRecord {
   infoDescription: string | null;
   specHash: string;
   specJson: string;
+  /** The document as received, before corrections (D20). `null` for rows from before migration 2. */
+  sourceSpecJson: string | null;
   sourceType: 'url' | 'content' | null;
   sourceUri: string | null;
   createdAt: string;
@@ -57,4 +61,77 @@ export interface EnvironmentRecord {
   source: EnvironmentSource;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Who found a flaw: Portolan's own repair pass (D21) or an agent through add_api (D20). */
+export type CorrectionOrigin = 'portolan' | 'agent';
+
+/**
+ * - `applied`: the correction is part of the current document.
+ * - `stale`: an agent correction that no longer applies to the upstream document.
+ * - `resolved`: a Portolan repair the upstream document no longer needs.
+ * - `reported`: a flaw reported without a patch.
+ * - `reverted`: an agent correction withdrawn through add_api.
+ */
+export type CorrectionStatus = 'applied' | 'stale' | 'resolved' | 'reported' | 'reverted';
+
+export type UpstreamIssueStatus = 'filed' | 'existing' | 'draft' | 'failed' | 'rate_limited';
+
+export interface CorrectionRecord {
+  id: string;
+  apiId: string;
+  origin: CorrectionOrigin;
+  kind: string;
+  fingerprint: string;
+  title: string;
+  description: string | null;
+  /** RFC 6902 operations as JSON, or `null` for a report without a fix. */
+  patchJson: string | null;
+  status: CorrectionStatus;
+  upstreamRepo: string | null;
+  upstreamIssueUrl: string | null;
+  upstreamIssueStatus: UpstreamIssueStatus | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A Spectral finding for one stored version (docs/DEVIATIONS.md D23). */
+export interface LintFindingRecord {
+  rule: string;
+  severity: 'error' | 'warn' | 'info' | 'hint';
+  pointer: string;
+  message: string;
+}
+
+/** What an enrichment describes (docs/DEVIATIONS.md D24). */
+export type EnrichmentTarget = 'api' | 'operation';
+
+export interface EnrichmentRecord {
+  apiId: string;
+  target: EnrichmentTarget;
+  contentHash: string;
+  canonicalId: string | null;
+  payloadJson: string;
+  agent: string;
+  createdAt: string;
+}
+
+/** A problem an agent noticed while describing an operation (docs/DEVIATIONS.md D24). */
+export interface AgentFinding {
+  severity: 'error' | 'warn' | 'info';
+  message: string;
+}
+
+export interface OperationEnrichmentPayload {
+  description?: string;
+  /** Parameter name → description. */
+  parameters?: Record<string, string>;
+  /** Top-level request body property → description. */
+  fields?: Record<string, string>;
+  findings?: AgentFinding[];
+}
+
+export interface ApiEnrichmentPayload {
+  description?: string;
+  keywords?: string[];
 }

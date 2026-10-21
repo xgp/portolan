@@ -1,9 +1,11 @@
 openapi: 3.0.3
 info:
-  title: Missing Version API
+  title: Invalid Response API
+  version: '1'
 paths:
   /x:
     get:
       responses:
-        '200':
-          description: OK
+        # A response object must have a description. Portolan cannot know what it should
+        # say, so this is not something it repairs.
+        '200': {}

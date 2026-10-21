@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseConfig, isLoopbackHost } from '../../src/config/config.js';
+import { parseConfig, isLoopbackHost, secretEnvNames } from '../../src/config/config.js';
 import { PortolanError } from '../../src/errors/errors.js';
 
 describe('config', () => {
@@ -105,5 +105,63 @@ describe('config', () => {
 
   it.each(['0.0.0.0', 'example.com', '10.0.0.1'])('treats %s as non-loopback', (host) => {
     expect(isLoopbackHost(host)).toBe(false);
+  });
+});
+
+describe('feedback config (docs/DEVIATIONS.md D22)', () => {
+  it('drafts upstream issues by default and never files without a token', () => {
+    const config = parseConfig({}, 'test');
+    expect(config.feedback.upstream_issues).toBe('draft');
+    expect(config.feedback.github.api_url).toBe('https://api.github.com');
+    expect(() => parseConfig({ feedback: { upstream_issues: 'file' } }, 'test')).toThrow(
+      /feedback\.github\.token_env is not set/,
+    );
+  });
+
+  it('accepts only owner/name repositories', () => {
+    expect(() =>
+      parseConfig({ feedback: { repositories: { acme: 'https://github.com/acme/api' } } }, 'test'),
+    ).toThrow(PortolanError);
+    expect(
+      parseConfig({ feedback: { repositories: { acme: 'acme/api' } } }, 'test').feedback
+        .repositories,
+    ).toEqual({ acme: 'acme/api' });
+  });
+});
+
+describe('lint and enrichment config (docs/DEVIATIONS.md D23, D24)', () => {
+  it('lints by default and enriches with whichever agent is available', () => {
+    const config = parseConfig({}, 'test');
+    expect(config.lint).toEqual({ enabled: true, rules: {} });
+    expect(config.enrichment).toMatchObject({
+      agent: 'auto',
+      agents: {
+        claude: { command: 'claude-agent-acp', args: [], env: [] },
+        codex: { command: 'codex-acp', args: [], env: [] },
+      },
+      max_operations_per_api: 200,
+      npx_fallback: true,
+    });
+  });
+
+  it('rejects unknown agents and rule severities', () => {
+    expect(() => parseConfig({ enrichment: { agent: 'gemini' } }, 'test')).toThrow(PortolanError);
+    expect(() => parseConfig({ lint: { rules: { 'info-contact': 'loud' } } }, 'test')).toThrow(
+      PortolanError,
+    );
+  });
+
+  it('lists every variable a secret is read from', () => {
+    const config = parseConfig(
+      {
+        auth_profiles: {
+          a: { type: 'bearer', token_env: 'A_TOKEN' },
+          b: { type: 'basic', username_env: 'B_USER', password_env: 'B_PASS' },
+        },
+        feedback: { github: { token_env: 'GH_TOKEN' } },
+      },
+      'test',
+    );
+    expect([...secretEnvNames(config)].sort()).toEqual(['A_TOKEN', 'B_PASS', 'B_USER', 'GH_TOKEN']);
   });
 });

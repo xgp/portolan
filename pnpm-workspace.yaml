@@ -1,2 +1,4 @@
 allowBuilds:
   esbuild: true
+  # Spectral depends on Scarf, whose install script only reports install analytics.
+  '@scarf/scarf': false

@@ -5,6 +5,12 @@
  * import can never leave the index describing a version that was rolled back.
  */
 import type { Database } from '../database.js';
+import {
+  apiEnrichmentText,
+  EnrichmentRepository,
+  operationContentHash,
+  operationEnrichmentText,
+} from './enrichments.js';
 import type { ApiRecord, ApiVersionRecord, OperationRecord } from './types.js';
 
 export interface ApiIndexInput {
@@ -12,10 +18,21 @@ export interface ApiIndexInput {
   version: ApiVersionRecord;
 }
 
+/**
+ * Text a coding agent generated for an API or operation (docs/DEVIATIONS.md D24) is
+ * appended to the description and parameter columns. It only ever widens what a query
+ * can match; the document itself, and what inspect_api reports as its descriptions, are
+ * unchanged.
+ */
 export class SearchIndexRepository {
-  constructor(private readonly db: Database) {}
+  private readonly enrichments: EnrichmentRepository;
+
+  constructor(private readonly db: Database) {
+    this.enrichments = new EnrichmentRepository(db);
+  }
 
   reindexApi({ api, version }: ApiIndexInput): void {
+    const enrichment = this.enrichments.get(api.id, 'api', version.specHash);
     this.db.prepare('DELETE FROM api_fts WHERE api_id = ?').run(api.id);
     this.db
       .prepare(
@@ -27,7 +44,7 @@ export class SearchIndexRepository {
         // The id itself is a strong signal ("keycloak"), so it joins the name column.
         `${api.id} ${api.name}`,
         api.aliases.join(' '),
-        api.description ?? '',
+        joinText(api.description, enrichment && apiEnrichmentText(enrichment.payloadJson)),
         api.tags.join(' '),
         version.infoTitle ?? '',
         version.infoDescription ?? '',
@@ -36,6 +53,7 @@ export class SearchIndexRepository {
 
   reindexOperations(apiId: string, operations: readonly OperationRecord[]): void {
     this.db.prepare('DELETE FROM operation_fts WHERE api_id = ?').run(apiId);
+    const enrichments = this.enrichments.mapForApi(apiId, 'operation');
     const stmt = this.db.prepare(
       `INSERT INTO operation_fts
          (operation_row_id, api_id, canonical_id, source_operation_id, summary, tags,
@@ -43,6 +61,8 @@ export class SearchIndexRepository {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const op of operations) {
+      const enrichment = enrichments.get(operationContentHash(op.operationJson));
+      const generated = enrichment ? operationEnrichmentText(enrichment.payloadJson) : undefined;
       stmt.run(
         op.id,
         apiId,
@@ -53,8 +73,8 @@ export class SearchIndexRepository {
         op.tags.join(' '),
         splitPath(op.path),
         op.method,
-        op.description ?? '',
-        op.paramText ?? '',
+        joinText(op.description, generated?.description),
+        joinText(op.paramText, generated?.parameters),
         op.schemaText ?? '',
       );
     }
@@ -64,6 +84,10 @@ export class SearchIndexRepository {
     this.db.prepare('DELETE FROM api_fts WHERE api_id = ?').run(apiId);
     this.db.prepare('DELETE FROM operation_fts WHERE api_id = ?').run(apiId);
   }
+}
+
+function joinText(...parts: (string | null | undefined)[]): string {
+  return parts.filter(Boolean).join(' ');
 }
 
 /**
