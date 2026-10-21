@@ -204,6 +204,19 @@ async function main() {
     return;
   }
 
+  // Deno's Node-compatibility layer can start internal work from a promise nothing awaits,
+  // and some of it reads the `Deno` global that lockDownGlobals() removes. Left unhandled,
+  // that rejection terminates the process and loses the script's own outcome. So a
+  // rejection nothing handles is reported in the script's logs and the script carries on;
+  // a promise the script itself forgot to await is reported the same way.
+  globalThis.addEventListener('unhandledrejection', (event) => {
+    event.preventDefault();
+    const reason = event.reason;
+    const name = reason && reason.name ? String(reason.name) : 'Error';
+    const message = reason && reason.message ? String(reason.message) : String(reason);
+    console.error(`Unhandled promise rejection: ${name}: ${message}`);
+  });
+
   lockDownGlobals();
 
   let result;

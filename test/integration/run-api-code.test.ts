@@ -25,6 +25,30 @@ afterEach(async () => {
 });
 
 describe('run_api_code', () => {
+  // Deno's Node-compatibility layer can read the removed `Deno` global from a promise
+  // nothing awaits (seen in CI from `import('node:child_process')`). That rejection used
+  // to terminate the sandbox and lose the script's result.
+  it('reports a rejection nothing handles in the logs, and carries on', async () => {
+    const h = await setup();
+    const result = await h.app.sandbox.run(
+      {
+        apiId: h.apiId,
+        code: `
+          (async () => Deno.version)();
+          Promise.reject(new TypeError('forgotten'));
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { finished: true };
+        `,
+      },
+      context,
+    );
+    expect(result.result).toEqual({ finished: true });
+    expect(result.logs).toEqual([
+      '[error] Unhandled promise rejection: ReferenceError: Deno is not defined',
+      '[error] Unhandled promise rejection: TypeError: forgotten',
+    ]);
+  });
+
   it('runs a script that returns a value', async () => {
     const h = await setup();
     const result = await h.app.sandbox.run(
