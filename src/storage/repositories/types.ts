@@ -94,3 +94,44 @@ export interface CorrectionRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+/** A Spectral finding for one stored version (docs/DEVIATIONS.md D23). */
+export interface LintFindingRecord {
+  rule: string;
+  severity: 'error' | 'warn' | 'info' | 'hint';
+  pointer: string;
+  message: string;
+}
+
+/** What an enrichment describes (docs/DEVIATIONS.md D24). */
+export type EnrichmentTarget = 'api' | 'operation';
+
+export interface EnrichmentRecord {
+  apiId: string;
+  target: EnrichmentTarget;
+  contentHash: string;
+  canonicalId: string | null;
+  payloadJson: string;
+  agent: string;
+  createdAt: string;
+}
+
+/** A problem an agent noticed while describing an operation (docs/DEVIATIONS.md D24). */
+export interface AgentFinding {
+  severity: 'error' | 'warn' | 'info';
+  message: string;
+}
+
+export interface OperationEnrichmentPayload {
+  description?: string;
+  /** Parameter name → description. */
+  parameters?: Record<string, string>;
+  /** Top-level request body property → description. */
+  fields?: Record<string, string>;
+  findings?: AgentFinding[];
+}
+
+export interface ApiEnrichmentPayload {
+  description?: string;
+  keywords?: string[];
+}

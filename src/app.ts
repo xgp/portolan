@@ -6,6 +6,7 @@
  */
 import { Catalog, networkPolicyFrom } from './catalog/catalog.js';
 import type { PortolanConfig } from './config/schema.js';
+import { Enricher } from './enrichment/enricher.js';
 import { AuthResolver } from './execution/auth.js';
 import { Caller } from './execution/caller.js';
 import { OAuthTokenCache } from './execution/oauth.js';
@@ -20,6 +21,8 @@ export interface Portolan {
   readonly logger: Logger;
   readonly db: Database;
   readonly catalog: Catalog;
+  /** docs/DEVIATIONS.md D24. */
+  readonly enricher: Enricher;
   readonly search: SearchProvider;
   readonly caller: Caller;
   readonly auth: AuthResolver;
@@ -40,7 +43,8 @@ export function createPortolan(options: CreatePortolanOptions): Portolan {
   const db = openDatabase({ path: options.databasePath ?? config.database.path });
 
   const policy = networkPolicyFrom(config);
-  const catalog = new Catalog(db, config, logger);
+  const enricher = new Enricher({ db, config, logger });
+  const catalog = new Catalog(db, config, logger, enricher);
   catalog.syncConfiguredEnvironments();
 
   const oauth = new OAuthTokenCache(
@@ -58,11 +62,13 @@ export function createPortolan(options: CreatePortolanOptions): Portolan {
     logger,
     db,
     catalog,
+    enricher,
     search,
     caller,
     auth,
     sandbox,
     close() {
+      enricher.close();
       oauth.clear();
       db.close();
     },

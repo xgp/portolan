@@ -102,6 +102,25 @@ describe('MCP surface', () => {
     expect(reverted.data.corrections[0].status).toBe('reverted');
   });
 
+  // docs/DEVIATIONS.md D23, D24.
+  it('reports lint findings and enrichment status from add_api', async () => {
+    const result = await harness.call('add_api', {
+      api_id: 'e2e-lint',
+      spec_content: JSON.stringify({
+        openapi: '3.0.3',
+        info: { title: 'Lint', version: '1' },
+        servers: [{ url: 'https://lint.example.com' }],
+        paths: { '/x': { get: { responses: { 200: { description: 'OK' } } } } },
+      }),
+    });
+    expect(result.isError).toBe(false);
+    expect(result.data.lint.warnings).toBeGreaterThan(0);
+    expect(result.data.lint.findings).toContainEqual(
+      expect.objectContaining({ rule: 'operation-operationId', pointer: '/paths/~1x/get' }),
+    );
+    expect(result.data.enrichment).toEqual({ status: 'disabled' });
+  });
+
   it('returns errors as readable tool results rather than protocol failures', async () => {
     const result = await harness.call('search_api', { api_id: 'nope', query: 'x' });
     expect(result.isError).toBe(true);

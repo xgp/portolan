@@ -34,7 +34,9 @@ export const TOOL_DESCRIPTIONS = {
     'are not accepted, so read a local file yourself and pass its contents. Also use it ' +
     'when a registered document turns out to be wrong: pass api_id, issue and patches, and ' +
     "no spec source, to correct Portolan's copy. Corrections survive re-imports, and " +
-    'Portolan reports the flaw to the upstream repository when it knows it.',
+    'Portolan reports the flaw to the upstream repository when it knows it. The result ' +
+    'summarises lint findings for the document, and says whether a coding agent will ' +
+    'describe its operations for search in the background.',
   find_api:
     'Search the API library to identify which registered service can perform a task. Use ' +
     'this before search_api when you do not already know the API ID. Returns API ' +
@@ -46,7 +48,9 @@ export const TOOL_DESCRIPTIONS = {
   inspect_api:
     'Retrieve detailed OpenAPI parameters, request schemas, responses, examples, and ' +
     'security requirements for selected operations. Request at most 10 operations per ' +
-    'call, and only the ones you intend to use.',
+    'call, and only the ones you intend to use. An operation may also carry lint ' +
+    'findings, and descriptions a coding agent wrote under "generated" — helpful where ' +
+    'the document says little, but the document itself is authoritative.',
   call_api:
     'Execute one registered OpenAPI operation using a configured environment and ' +
     'server-side credentials. You do not supply a URL, a base URL, credentials or ' +
@@ -93,7 +97,9 @@ on every call: call add_api with api_id, issue {title, description} and patches 
 JSON Patch against the document), with no spec_url or spec_content. The fix applies to
 every later call, survives re-imports, and is reported to the upstream project when its
 repository is known. Portolan repairs some structural flaws itself on import; those are
-listed under corrections in the add_api result.
+listed under corrections in the add_api result. A finding under "generated" in inspect_api
+is a lead to verify, not an established flaw: confirm it against the API before
+correcting the document.
 
 Errors are returned as {"error": {"code", "message", "details"}} with stable codes.
 The details usually say exactly what to fix.`;

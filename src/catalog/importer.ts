@@ -20,6 +20,7 @@ import type { NetworkPolicyOptions } from '../net/address-policy.js';
 import { assertUrlAllowed } from '../net/safe-fetch.js';
 import { buildOperationSearchText, extractOperations } from '../openapi/operations.js';
 import { assertJsonPatch, type JsonPatchOperation } from '../openapi/json-patch.js';
+import { lintDocument, type LintFinding } from '../openapi/lint.js';
 import { parseSpecText, validateOpenApi } from '../openapi/parser.js';
 import { repairDocument } from '../openapi/repairs.js';
 import type { OpenApiDocument } from '../openapi/types.js';
@@ -27,13 +28,16 @@ import { transaction, type Database } from '../storage/database.js';
 import { ApiRepository } from '../storage/repositories/apis.js';
 import { CorrectionRepository } from '../storage/repositories/corrections.js';
 import { EnvironmentRepository } from '../storage/repositories/environments.js';
+import { LintFindingRepository } from '../storage/repositories/lint-findings.js';
 import { OperationRepository } from '../storage/repositories/operations.js';
 import { SearchIndexRepository } from '../storage/repositories/search-index.js';
 import type { OperationRecord } from '../storage/repositories/types.js';
 import {
   MAX_REPORTED_CORRECTIONS,
+  MAX_REPORTED_LINT_FINDINGS,
   type AddApiInput,
   type AddApiResult,
+  type LintSummary,
   type UpstreamIssueSummary,
 } from '../services/types.js';
 import { apiVersionId, deriveApiId, isValidApiId, operationRowId } from './identifiers.js';
@@ -60,6 +64,8 @@ export interface ImporterOptions {
   knownAuthProfiles: ReadonlySet<string>;
   /** docs/DEVIATIONS.md D22. */
   feedback: PortolanConfig['feedback'];
+  /** docs/DEVIATIONS.md D23. */
+  lint: PortolanConfig['lint'];
 }
 
 interface LoadedSource {
@@ -74,6 +80,7 @@ export class Importer {
   private readonly environments: EnvironmentRepository;
   private readonly index: SearchIndexRepository;
   private readonly corrections: CorrectionRepository;
+  private readonly lintFindings: LintFindingRepository;
   private readonly upstream: UpstreamReporter;
 
   constructor(private readonly options: ImporterOptions) {
@@ -82,6 +89,7 @@ export class Importer {
     this.environments = new EnvironmentRepository(options.db);
     this.index = new SearchIndexRepository(options.db);
     this.corrections = new CorrectionRepository(options.db);
+    this.lintFindings = new LintFindingRepository(options.db);
     this.upstream = new UpstreamReporter({
       config: options.feedback,
       policy: options.policy,
@@ -237,8 +245,10 @@ export class Importer {
     ): Promise<AddApiResult> => {
       const upstream = await this.reportUpstream(apiId, recorded, source, result);
       const touched = recorded.touched;
+      const lint = this.lintSummary(apiId);
       return {
         ...result,
+        ...(lint ? { lint } : {}),
         ...(touched.length > 0
           ? {
               corrections: touched.slice(0, MAX_REPORTED_CORRECTIONS).map((c) => ({
@@ -363,6 +373,20 @@ export class Importer {
       };
     });
 
+    // --- lint (D23) ----------------------------------------------------------
+    // Only a version that has not been stored before is linted; a reused one already has
+    // its findings.
+    let lintFindings: LintFinding[] = [];
+    if (this.options.lint.enabled) {
+      try {
+        lintFindings = await lintDocument(document, { rules: this.options.lint.rules });
+      } catch (error) {
+        warnings.push(
+          `The document could not be linted: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+
     // --- persist (one transaction, SPEC.md §10) ----------------------------
     const persisted = transaction(this.options.db, () => {
       this.apis.upsert(apiRow);
@@ -382,6 +406,7 @@ export class Importer {
       });
 
       this.operations.insertMany(operationRecords);
+      this.lintFindings.insertMany(versionId, lintFindings);
       this.apis.setCurrentVersion(apiId, versionId);
 
       if (environmentRecord) this.environments.insertIfAbsent(environmentRecord);
@@ -416,6 +441,23 @@ export class Importer {
       'imported api',
     );
     return finish(persisted.result, persisted.recorded);
+  }
+
+  /** D23: counts and the most severe findings for the API's current version. */
+  private lintSummary(apiId: string): LintSummary | undefined {
+    if (!this.options.lint.enabled) return undefined;
+    const version = this.apis.getCurrentVersion(apiId);
+    if (!version) return undefined;
+    const findings = this.lintFindings.listForVersion(version.id);
+    const count = (severity: LintFinding['severity']) =>
+      findings.filter((f) => f.severity === severity).length;
+    return {
+      errors: count('error'),
+      warnings: count('warn'),
+      info: count('info'),
+      hints: count('hint'),
+      findings: findings.slice(0, MAX_REPORTED_LINT_FINDINGS),
+    };
   }
 
   /** Fetch or read the document, parse it and bundle its references. */

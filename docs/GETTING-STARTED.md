@@ -155,12 +155,21 @@ Claude calls `add_api` and you get back:
     { "name": "default", "base_url": "https://api.apis.guru/v2", "allow_mutations": false }
   ],
   "warnings": [],
-  "status": "added"
+  "status": "added",
+  "lint": { "errors": 0, "warnings": 0, "info": 0, "hints": 0, "findings": [] },
+  "enrichment": { "status": "queued", "agent": "claude", "pending": 7 }
 }
 ```
 
 The API is now stored. It survives restarts, and you never have to paste that
 specification again.
+
+`lint` is what Spectral found wrong with the document. This one is clean; most are not.
+`enrichment` appears when a coding agent can describe the operations for search, which
+it then does in the background. That needs Claude Code or Codex, logged in. Portolan runs
+the agent's ACP adapter with `npx` the first time (a large download), or you can install
+it once with `npm install -g @agentclientprotocol/claude-agent-acp`. Without an agent
+you see `"status": "unavailable"` and everything else works the same.
 
 ---
 
@@ -425,6 +434,13 @@ Add an `environments:` entry as in Step 6.
 A correction did not apply to the registered document, or the result was not valid
 OpenAPI. Nothing was changed. Patch paths are JSON Pointers, so `/` in a path key is
 written `~1`: `/paths/~1users~1{id}/get`.
+
+**`"enrichment": {"status": "unavailable"}`**
+Neither the agent CLI nor its ACP adapter was found on `PATH`, `npx` could not start the
+adapter, or the agent is not logged in. `portolan doctor` says which. Make sure `claude`
+(or `codex`) works on its own, install `@agentclientprotocol/claude-agent-acp` (or
+`codex-acp`) if `npx` is unavailable, then run `portolan enrich` to describe the APIs you
+already have.
 
 **`MUTATION_NOT_ALLOWED`**
 Working as intended. Set `allow_mutations: true` on that specific environment (Step 7).

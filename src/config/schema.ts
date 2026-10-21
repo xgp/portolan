@@ -88,6 +88,24 @@ export const repositoryName = z
   .string()
   .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*)\/[A-Za-z0-9._-]+$/, 'must be a repository as "owner/name"');
 
+/** How to start one ACP agent adapter (docs/DEVIATIONS.md D24). */
+const acpAgentSchema = (defaultCommand: string) =>
+  z
+    .object({
+      /** Executable name (looked up on PATH) or absolute path. */
+      command: z.string().min(1).default(defaultCommand),
+      args: z.array(z.string()).default([]),
+      /**
+       * Extra environment variables passed through to the agent, beyond the built-in
+       * allowlist. Variables named anywhere else in this file are never passed.
+       */
+      env: z.array(envVarName).default([]),
+    })
+    .strict()
+    .prefault({});
+
+export const lintSeveritySchema = z.enum(['off', 'error', 'warn', 'info', 'hint']);
+
 export const configSchema = z
   .object({
     database: z
@@ -199,6 +217,47 @@ export const configSchema = z
           })
           .strict()
           .prefault({}),
+      })
+      .strict()
+      .prefault({}),
+
+    /** Spectral linting during add_api (docs/DEVIATIONS.md D23). */
+    lint: z
+      .object({
+        enabled: z.boolean().default(true),
+        /** Spectral rule name → severity or `off`, over Portolan's defaults. */
+        rules: z.record(z.string().min(1), lintSeveritySchema).default({}),
+      })
+      .strict()
+      .prefault({}),
+
+    /**
+     * Describing operations and reviewing documents with a local coding agent over the
+     * Agent Client Protocol (docs/DEVIATIONS.md D24). `auto` uses Claude Code, then Codex,
+     * whichever adapter is installed and logged in; `off` never starts one.
+     */
+    enrichment: z
+      .object({
+        agent: z.enum(['auto', 'claude', 'codex', 'off']).default('auto'),
+        agents: z
+          .object({
+            claude: acpAgentSchema('claude-agent-acp'),
+            codex: acpAgentSchema('codex-acp'),
+          })
+          .strict()
+          .prefault({}),
+        /**
+         * When an adapter is not on PATH but `claude` or `codex` is, run the adapter with
+         * `npx -y` at the version Portolan pins. The first run downloads it.
+         */
+        npx_fallback: z.boolean().default(true),
+        /** A model the agent offers, e.g. `sonnet`. The agent's default when unset. */
+        model: z.string().min(1).optional(),
+        /** Operations described per prompt. */
+        batch_size: z.number().int().min(1).max(100).default(20),
+        /** Operations described per API; the least-documented are chosen first. */
+        max_operations_per_api: z.number().int().min(0).default(200),
+        prompt_timeout_ms: z.number().int().positive().default(300_000),
       })
       .strict()
       .prefault({}),
