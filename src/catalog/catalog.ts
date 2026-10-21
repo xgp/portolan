@@ -50,6 +50,7 @@ export class Catalog {
       maxRedirects: config.limits.max_redirects,
       allowAgentAuthProfileBinding: config.security.allow_agent_auth_profile_binding,
       knownAuthProfiles: new Set(Object.keys(config.auth_profiles)),
+      feedback: config.feedback,
     });
   }
 

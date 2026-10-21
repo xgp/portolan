@@ -54,6 +54,54 @@ describe('MCP surface', () => {
     expect(instructions).toMatch(/Never pass\s+tokens/);
   });
 
+  // docs/DEVIATIONS.md D20: correcting a document stays inside add_api.
+  it('corrects a registered document through add_api, and can revert it', async () => {
+    const spec = JSON.stringify({
+      openapi: '3.0.3',
+      info: { title: 'E2E Corrections', version: '1' },
+      servers: [{ url: 'https://corrections.example.com' }],
+      paths: {
+        '/items': {
+          get: { operationId: 'listItems', responses: { '200': { description: 'OK' } } },
+        },
+      },
+    });
+    expect((await harness.call('add_api', { spec_content: spec, api_id: 'e2e-fix' })).isError).toBe(
+      false,
+    );
+
+    const corrected = await harness.call('add_api', {
+      api_id: 'e2e-fix',
+      issue: { title: 'GET /items omits the page parameter', description: 'Accepts ?page=N.' },
+      patches: [
+        {
+          op: 'add',
+          path: '/paths/~1items/get/parameters',
+          value: [{ name: 'page', in: 'query', schema: { type: 'integer' } }],
+        },
+      ],
+      upstream_repo: 'acme/items',
+    });
+    expect(corrected.isError).toBe(false);
+    expect(corrected.data.status).toBe('corrected');
+    expect(corrected.data.upstream_issues[0]).toMatchObject({
+      repo: 'acme/items',
+      status: 'draft',
+    });
+
+    const inspected = await harness.call('inspect_api', {
+      api_id: 'e2e-fix',
+      operation_ids: ['listItems'],
+    });
+    expect(inspected.data.operations[0].parameters.query[0].name).toBe('page');
+
+    const reverted = await harness.call('add_api', {
+      api_id: 'e2e-fix',
+      revert_corrections: [corrected.data.corrections[0].id],
+    });
+    expect(reverted.data.corrections[0].status).toBe('reverted');
+  });
+
   it('returns errors as readable tool results rather than protocol failures', async () => {
     const result = await harness.call('search_api', { api_id: 'nope', query: 'x' });
     expect(result.isError).toBe(true);

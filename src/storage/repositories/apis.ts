@@ -13,6 +13,7 @@ function toApi(row: Row): ApiRecord {
     aliases: JSON.parse((row.aliases_json as string) || '[]') as string[],
     tags: JSON.parse((row.tags_json as string) || '[]') as string[],
     currentVersionId: (row.current_version_id as string | null) ?? null,
+    upstreamRepo: (row.upstream_repo as string | null) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -28,6 +29,7 @@ function toVersion(row: Row): ApiVersionRecord {
     infoDescription: (row.info_description as string | null) ?? null,
     specHash: row.spec_hash as string,
     specJson: row.spec_json as string,
+    sourceSpecJson: (row.source_spec_json as string | null) ?? null,
     sourceType: (row.source_type as 'url' | 'content' | null) ?? null,
     sourceUri: (row.source_uri as string | null) ?? null,
     createdAt: row.created_at as string,
@@ -83,6 +85,12 @@ export class ApiRepository {
       .run(versionId, nowIso(), apiId);
   }
 
+  setUpstreamRepo(apiId: string, repo: string): void {
+    this.db
+      .prepare('UPDATE apis SET upstream_repo = ?, updated_at = ? WHERE id = ?')
+      .run(repo, nowIso(), apiId);
+  }
+
   /** SPEC.md §44: an identical specification must not create a new version. */
   findVersionByHash(apiId: string, specHash: string): ApiVersionRecord | null {
     const row = this.db
@@ -117,15 +125,19 @@ export class ApiRepository {
   }
 
   insertVersion(
-    version: Omit<ApiVersionRecord, 'createdAt'> & { createdAt?: string },
+    input: Omit<ApiVersionRecord, 'createdAt' | 'sourceSpecJson'> & {
+      createdAt?: string;
+      sourceSpecJson?: string | null;
+    },
   ): ApiVersionRecord {
+    const version = { ...input, sourceSpecJson: input.sourceSpecJson ?? null };
     const createdAt = version.createdAt ?? nowIso();
     this.db
       .prepare(
         `INSERT INTO api_versions
            (id, api_id, openapi_version, info_version, info_title, info_description,
-            spec_hash, spec_json, source_type, source_uri, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            spec_hash, spec_json, source_spec_json, source_type, source_uri, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         version.id,
@@ -136,6 +148,7 @@ export class ApiRepository {
         version.infoDescription,
         version.specHash,
         version.specJson,
+        version.sourceSpecJson,
         version.sourceType,
         version.sourceUri,
         createdAt,

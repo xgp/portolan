@@ -85,6 +85,10 @@ function validateSemantics(config: PortolanConfig, source: string): PortolanConf
     }
   }
 
+  if (config.feedback.upstream_issues === 'file' && !config.feedback.github.token_env) {
+    problems.push('feedback.upstream_issues is "file" but feedback.github.token_env is not set');
+  }
+
   if (config.logging.destination === 'file' && !config.logging.file) {
     problems.push('logging.destination is "file" but logging.file is not set');
   }
@@ -168,6 +172,19 @@ security:
   # When false (the default) the add_api MCP tool may not attach a credential
   # profile to an environment; do that here instead.
   allow_agent_auth_profile_binding: false
+
+feedback:
+  # What to do when Portolan or an agent corrects a flaw in a specification:
+  #   draft — return a prefilled "new issue" link for the upstream repository
+  #   file  — file the issue on GitHub with the token below
+  #   off   — correct the local copy only
+  upstream_issues: draft
+  # Upstream repositories by api_id, when they cannot be detected from the spec URL.
+  # repositories:
+  #   example: example-org/example-openapi
+  # github:
+  #   token_env: GITHUB_TOKEN
+  #   max_issues_per_repo_per_day: 5
 
 logging:
   level: info

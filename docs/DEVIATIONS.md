@@ -261,3 +261,112 @@ _Decision:_ that specific validator finding is demoted to a warning and the impo
 proceeds with `method:path` identifiers, exactly as §14 prescribes. Every other
 validation failure still rejects the document. The demotion list is a single explicit
 pattern in `src/openapi/parser.ts`, not a blanket "continue on error" mode.
+
+---
+
+## Correcting specifications ([issue #1](https://github.com/xgp/portolan/issues/1))
+
+§3.3 makes the OpenAPI document authoritative, and documents in the wild are wrong often
+enough to matter: undeclared path parameters, schemas that do not match real responses,
+missing query parameters. The spec has no feedback path for that. An agent that notices
+can only work around the flaw on every call, and a document that a strict validator
+rejects for a trivial reason cannot be imported at all. D20–D22 add that feedback path
+without changing the six-tool surface.
+
+### D20 — `add_api` corrects a registered document (**addition**)
+
+_Spec:_ §16 defines `add_api` as import-only, and it requires a document.
+
+_Addition:_ `add_api` takes `issue {title, description}`, `patches` (RFC 6902 JSON
+Patch), `revert_corrections` and `upstream_repo`. When an `api_id` is given with no
+`spec_url` or `spec_content`, Portolan corrects the registered API in place. It re-derives
+the document from the copy it stored on import (`api_versions.source_spec_json`) and
+creates a new version with `status: "corrected"`.
+
+The stored document is always derived, never edited in place: the document as received,
+then the D21 repairs, then every active agent correction in the order it was made.
+Corrections live in `spec_corrections`, keyed by API, so they outlive any one version.
+
+- A re-import from upstream replays every correction. One that no longer applies (a
+  `test` operation fails, or its target has moved) is marked `stale` with a warning
+  rather than failing the import, since the upstream document has probably fixed it.
+- A patch that does not apply when submitted, or that yields an invalid document, is
+  refused with `SPEC_PATCH_INVALID` (a code added to §25's list), and nothing changes.
+- A replayed correction can break validation of a new upstream document. Portolan then
+  re-applies the corrections one at a time, validating after each, and marks the
+  offenders `stale`. Each correction costs one validation, so this only runs when the
+  whole document has already failed.
+- An identical resubmission is the same correction (it is fingerprinted by the patch),
+  not a duplicate.
+- Returning to a document the API has already had, by reverting a correction or by
+  re-importing an older upstream version, reuses that version instead of violating the
+  unique `(api_id, spec_hash)` index.
+- An `issue` without `patches` records a flaw Portolan cannot fix (`reported`) so it can
+  still be raised upstream.
+
+_Why `add_api` and not a seventh tool:_ §3.2 is explicit that the surface is six tools,
+and `add_api` already owns the content of the library.
+
+_Security:_ this adds no capability. `add_api(replace=true)` already lets an agent
+replace a document wholesale, and nothing in a document can widen trust: base URLs come
+from environments, credentials from configuration, mutation rights from configuration
+(D5, D6).
+
+### D21 — structural flaws with one correct fix are repaired on import (**addition**, extends D19)
+
+_Spec:_ §10 requires validation and rejects invalid documents. D19 already demotes
+duplicate `operationId`s to a warning.
+
+_Problem:_ a common class of validator failure has exactly one reasonable fix, and
+refusing the whole document over it helps nobody.
+
+_Decision:_ `src/openapi/repairs.ts` repairs, before validation:
+
+| Flaw                                                           | Repair                                 |
+| -------------------------------------------------------------- | -------------------------------------- |
+| path variable `{x}` with no `in: path` declaration             | declare it as a required string        |
+| one undeclared variable plus one non-matching declaration      | rename the declaration                 |
+| `in: path` declaration with no matching `{x}` in the path      | remove it (it could never be sent)     |
+| path parameter without `required: true` (inline or via `$ref`) | set `required: true` at its definition |
+| OpenAPI 3.0 operation with no `responses`                      | add a `default` response               |
+| `info.version` missing                                         | `"unspecified"`                        |
+
+Anything that needs a judgment about what the API actually does is left to the validator
+to reject. Each repair is recorded in `spec_corrections` (`origin = 'portolan'`) with the
+JSON Patch that makes it, reported in the `add_api` result under `corrections`, and
+marked `resolved` once an upstream version no longer needs it. Repairs are recomputed on
+every import, never replayed.
+
+### D22 — flaws are raised with the upstream project (**addition**)
+
+_Decision:_ after an import commits, Portolan raises every correction not yet raised,
+grouped as one issue per agent correction plus one issue for all new D21 repairs. The
+upstream repository comes from, in order: `feedback.repositories` in config, the
+`upstream_repo` given to `add_api` (stored on the API), the GitHub URL the document was
+fetched from, then `info.contact.url`, `externalDocs.url` or `info.x-origin` in the
+document.
+
+`feedback.upstream_issues` decides what happens:
+
+- `draft` (default): the result carries a prefilled `github.com/<repo>/issues/new` link
+  for the user or agent to open. No outbound request is made.
+- `file`: Portolan files the issue itself with the token in `feedback.github.token_env`.
+- `off`: corrections stay local.
+
+When filing:
+
+1. Only repositories from **config** or from the **spec URL** are filed against. A
+   repository named by the agent or by the document's own metadata gets a draft link.
+   This is the D5 reasoning applied to the operator's GitHub token: an agent, or a
+   document an agent supplied, must not be able to aim it at a repository of its choice.
+2. Before filing, GitHub is searched for an issue carrying the same fingerprint (printed
+   in the issue body), so separate installations do not file duplicates. A match is
+   linked as `existing`.
+3. At most `max_issues_per_repo_per_day` (default 5) issues are filed per repository.
+   After that the result is `rate_limited` with a draft link.
+4. GitHub requests go through `safeFetch`, so the network policy and `allowed_hosts`
+   apply to them as to everything else.
+5. A failure is reported as `failed` with a draft link. It never fails the import.
+
+Issue bodies say they were opened automatically by Portolan. The `issue.description`
+written by an agent becomes public text, and the `add_api` schema tells the agent so.

@@ -6,16 +6,21 @@ export const FIND_API_MAX_LIMIT = 20;
 export const SEARCH_API_DEFAULT_LIMIT = 10;
 export const SEARCH_API_MAX_LIMIT = 30;
 export const INSPECT_API_MAX_OPERATIONS = 10;
+export const MAX_PATCH_OPERATIONS = 100;
 
 export const addApiSchema = z.object({
   spec_url: z
     .string()
-    .describe('HTTPS URL of an OpenAPI document. Supply exactly one of spec_url or spec_content.')
+    .describe(
+      'HTTPS URL of an OpenAPI document. Supply exactly one of spec_url or spec_content, or ' +
+        'neither when correcting a registered API.',
+    )
     .optional(),
   spec_content: z
     .string()
     .describe(
-      'An OpenAPI document as YAML or JSON text. Supply exactly one of spec_url or spec_content. ' +
+      'An OpenAPI document as YAML or JSON text. Supply exactly one of spec_url or spec_content, ' +
+        'or neither when correcting a registered API. ' +
         'Filesystem paths are not accepted; read the file yourself and pass its contents.',
     )
     .optional(),
@@ -48,6 +53,52 @@ export const addApiSchema = z.object({
   replace: z
     .boolean()
     .describe('Replace an existing API with this ID by adding a new version. Defaults to false.')
+    .optional(),
+  issue: z
+    .object({
+      title: z
+        .string()
+        .min(1)
+        .max(200)
+        .describe('One line naming the flaw, e.g. "GET /users/{id} omits the 404 response".'),
+      description: z
+        .string()
+        .max(8000)
+        .describe(
+          'What the document says, what the API actually does, and how you found out. ' +
+            'Becomes the body of the upstream issue, so never include credentials or personal data.',
+        )
+        .optional(),
+    })
+    .describe(
+      'A flaw you found in the OpenAPI document, e.g. a missing parameter or a schema that does ' +
+        'not match real responses. With api_id and no spec source, corrects the registered API.',
+    )
+    .optional(),
+  patches: z
+    .array(
+      z.object({
+        op: z.enum(['add', 'remove', 'replace', 'move', 'copy', 'test']),
+        path: z.string(),
+        value: z.unknown().optional(),
+        from: z.string().optional(),
+      }),
+    )
+    .max(MAX_PATCH_OPERATIONS)
+    .describe(
+      'RFC 6902 JSON Patch fixing the flaw in issue, applied to the whole document as ' +
+        'inspect_api presents it. Escape "/" in path keys as "~1", e.g. ' +
+        '/paths/~1users~1{id}/get/parameters/-. Lead with "test" operations so the fix is ' +
+        'skipped once the upstream document changes.',
+    )
+    .optional(),
+  revert_corrections: z
+    .array(z.string().min(1))
+    .describe('Ids of earlier corrections to withdraw, as returned in corrections.')
+    .optional(),
+  upstream_repo: z
+    .string()
+    .describe('GitHub repository that publishes this document, as "owner/name".')
     .optional(),
 });
 

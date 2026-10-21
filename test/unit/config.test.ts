@@ -107,3 +107,24 @@ describe('config', () => {
     expect(isLoopbackHost(host)).toBe(false);
   });
 });
+
+describe('feedback config (docs/DEVIATIONS.md D22)', () => {
+  it('drafts upstream issues by default and never files without a token', () => {
+    const config = parseConfig({}, 'test');
+    expect(config.feedback.upstream_issues).toBe('draft');
+    expect(config.feedback.github.api_url).toBe('https://api.github.com');
+    expect(() => parseConfig({ feedback: { upstream_issues: 'file' } }, 'test')).toThrow(
+      /feedback\.github\.token_env is not set/,
+    );
+  });
+
+  it('accepts only owner/name repositories', () => {
+    expect(() =>
+      parseConfig({ feedback: { repositories: { acme: 'https://github.com/acme/api' } } }, 'test'),
+    ).toThrow(PortolanError);
+    expect(
+      parseConfig({ feedback: { repositories: { acme: 'acme/api' } } }, 'test').feedback
+        .repositories,
+    ).toEqual({ acme: 'acme/api' });
+  });
+});

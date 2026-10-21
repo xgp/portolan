@@ -21,6 +21,33 @@ export interface AddApiInput {
   defaultEnvironment?: string;
   authProfile?: string;
   replace?: boolean;
+  /**
+   * docs/DEVIATIONS.md D20: a flaw found in the document. With `apiId` and no spec source,
+   * corrects the registered API in place.
+   */
+  issue?: { title: string; description?: string };
+  /** RFC 6902 operations correcting the flaw described by `issue`. */
+  patches?: unknown[];
+  /** Ids of earlier agent corrections to withdraw. */
+  revertCorrections?: string[];
+  /** `owner/name` of the repository that publishes the document. */
+  upstreamRepo?: string;
+}
+
+export interface CorrectionSummary {
+  id: string;
+  origin: 'portolan' | 'agent';
+  status: 'applied' | 'stale' | 'resolved' | 'reported' | 'reverted';
+  title: string;
+}
+
+export interface UpstreamIssueSummary {
+  repo: string;
+  status: 'filed' | 'existing' | 'draft' | 'failed' | 'rate_limited';
+  url: string;
+  title: string;
+  message?: string;
+  correction_ids: string[];
 }
 
 export interface AddApiResult {
@@ -31,8 +58,18 @@ export interface AddApiResult {
   operations: number;
   environments: { name: string; base_url: string; allow_mutations: boolean; source: string }[];
   warnings: string[];
-  status: 'added' | 'replaced' | 'unchanged';
+  status: 'added' | 'replaced' | 'corrected' | 'unchanged';
+  /**
+   * Corrections this call created or changed the status of (D20, D21), at most
+   * {@link MAX_REPORTED_CORRECTIONS}; `corrections_total` counts all of them.
+   */
+  corrections?: CorrectionSummary[];
+  corrections_total?: number;
+  /** Upstream issues drafted or filed by this call (D22). */
+  upstream_issues?: UpstreamIssueSummary[];
 }
+
+export const MAX_REPORTED_CORRECTIONS = 20;
 
 // ---------------------------------------------------------------------------
 // find_api / search_api (SPEC.md §17, §18)

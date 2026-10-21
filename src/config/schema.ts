@@ -83,6 +83,11 @@ export const environmentConfigSchema = z
 
 export type EnvironmentConfig = z.infer<typeof environmentConfigSchema>;
 
+/** A GitHub repository as `owner/name`. */
+export const repositoryName = z
+  .string()
+  .regex(/^[A-Za-z0-9](?:[A-Za-z0-9-]*)\/[A-Za-z0-9._-]+$/, 'must be a repository as "owner/name"');
+
 export const configSchema = z
   .object({
     database: z
@@ -171,6 +176,29 @@ export const configSchema = z
         /** Where logs go. stdio transport must never write to stdout. */
         destination: z.enum(['stderr', 'file']).default('stderr'),
         file: z.string().min(1).optional(),
+      })
+      .strict()
+      .prefault({}),
+
+    /**
+     * Raising specification flaws with the upstream project (docs/DEVIATIONS.md D22).
+     * `draft` (default) returns a prefilled "new issue" link and makes no outbound call;
+     * `file` files the issue with the token in `github.token_env`; `off` does neither.
+     */
+    feedback: z
+      .object({
+        upstream_issues: z.enum(['off', 'draft', 'file']).default('draft'),
+        /** api_id → `owner/name`. Authoritative over anything detected from a document. */
+        repositories: z.record(z.string().min(1), repositoryName).default({}),
+        github: z
+          .object({
+            token_env: envVarName.optional(),
+            api_url: httpsUrl.default('https://api.github.com'),
+            web_url: httpsUrl.default('https://github.com'),
+            max_issues_per_repo_per_day: z.number().int().min(0).default(5),
+          })
+          .strict()
+          .prefault({}),
       })
       .strict()
       .prefault({}),

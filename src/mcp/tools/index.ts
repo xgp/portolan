@@ -31,7 +31,10 @@ export const TOOL_DESCRIPTIONS = {
     'Add an OpenAPI-described HTTP API to the persistent Portolan API library. Use this ' +
     'when the user provides an OpenAPI specification or asks Portolan to remember an API ' +
     'for future use. Supply the document as spec_url or as spec_content; filesystem paths ' +
-    'are not accepted, so read a local file yourself and pass its contents.',
+    'are not accepted, so read a local file yourself and pass its contents. Also use it ' +
+    'when a registered document turns out to be wrong: pass api_id, issue and patches, and ' +
+    "no spec source, to correct Portolan's copy. Corrections survive re-imports, and " +
+    'Portolan reports the flaw to the upstream repository when it knows it.',
   find_api:
     'Search the API library to identify which registered service can perform a task. Use ' +
     'this before search_api when you do not already know the API ID. Returns API ' +
@@ -84,6 +87,14 @@ Things Portolan handles for you, which you should not attempt yourself:
   them for that environment. A MUTATION_NOT_ALLOWED error is a policy decision, not a
   transient failure: report it rather than retrying.
 
+When an API behaves differently from its specification, so that a call fails or returns
+data the schemas do not describe, correct the specification rather than working around it
+on every call: call add_api with api_id, issue {title, description} and patches (RFC 6902
+JSON Patch against the document), with no spec_url or spec_content. The fix applies to
+every later call, survives re-imports, and is reported to the upstream project when its
+repository is known. Portolan repairs some structural flaws itself on import; those are
+listed under corrections in the add_api result.
+
 Errors are returned as {"error": {"code", "message", "details"}} with stable codes.
 The details usually say exactly what to fix.`;
 
@@ -121,6 +132,21 @@ export function registerTools(server: McpServer, app: Portolan): void {
             : {}),
           ...(args.auth_profile !== undefined ? { authProfile: args.auth_profile } : {}),
           ...(args.replace !== undefined ? { replace: args.replace } : {}),
+          ...(args.issue !== undefined
+            ? {
+                issue: {
+                  title: args.issue.title,
+                  ...(args.issue.description !== undefined
+                    ? { description: args.issue.description }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(args.patches !== undefined ? { patches: args.patches } : {}),
+          ...(args.revert_corrections !== undefined
+            ? { revertCorrections: args.revert_corrections }
+            : {}),
+          ...(args.upstream_repo !== undefined ? { upstreamRepo: args.upstream_repo } : {}),
         });
         return toolSuccess(result, maxBytes);
       }),

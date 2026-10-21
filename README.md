@@ -116,18 +116,50 @@ environment variables and referenced by name.
 
 ## The six tools
 
-| Tool           | What it does                                                                                                            |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `add_api`      | Add or update an OpenAPI 3.0/3.1 document (JSON or YAML, by URL or inline). Creates a new version; the old one is kept. |
-| `find_api`     | "Which of my APIs can do X?" Returns API ids and descriptions. No operations, no schemas.                               |
-| `search_api`   | "Which operation in this API does X?" Returns compact operation candidates.                                             |
-| `inspect_api`  | Full parameters, request and response schemas, examples and security requirements for up to 10 named operations.        |
-| `call_api`     | Execute one operation against a configured environment with server-side credentials.                                    |
-| `run_api_code` | Run a sandboxed JavaScript workflow that can make several `api.call()` requests.                                        |
+| Tool           | What it does                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `add_api`      | Add or update an OpenAPI 3.0/3.1 document (JSON or YAML, by URL or inline), or correct a registered one. Creates a new version; the old one is kept. |
+| `find_api`     | "Which of my APIs can do X?" Returns API ids and descriptions. No operations, no schemas.                                                            |
+| `search_api`   | "Which operation in this API does X?" Returns compact operation candidates.                                                                          |
+| `inspect_api`  | Full parameters, request and response schemas, examples and security requirements for up to 10 named operations.                                     |
+| `call_api`     | Execute one operation against a configured environment with server-side credentials.                                                                 |
+| `run_api_code` | Run a sandboxed JavaScript workflow that can make several `api.call()` requests.                                                                     |
 
 The agent never supplies a URL, a base URL, a credential or an `Authorization` header.
 Destinations come from the configured environment; authentication is applied inside
 Portolan.
+
+### When the specification is wrong
+
+OpenAPI documents in the wild have mistakes. Portolan handles two cases:
+
+- **Structural flaws with one correct fix** are repaired on import, such as a path
+  variable nobody declared or a path parameter missing `required: true`. A document a
+  strict validator would refuse over one of these now imports, and the repairs are listed
+  under `corrections` in the result.
+- **Anything an agent discovers**, such as a missing parameter or a schema that does not
+  match real responses, is corrected through `add_api` with `api_id`, an `issue`
+  describing the flaw, and a JSON Patch:
+
+  ```json
+  {
+    "api_id": "users",
+    "issue": { "title": "GET /users omits the limit parameter", "description": "…" },
+    "patches": [
+      {
+        "op": "add",
+        "path": "/paths/~1users/get/parameters/-",
+        "value": { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+      }
+    ]
+  }
+  ```
+
+Corrections survive re-imports. One that stops fitting a new upstream version is marked
+stale instead of being forced onto it. When Portolan knows the upstream repository, it
+reports the flaw there: by default as a prefilled issue link, or by filing the issue
+itself if you configure a token (below). See
+[docs/DEVIATIONS.md](docs/DEVIATIONS.md#correcting-specifications-issue-1) D20–D22.
 
 ---
 
@@ -201,6 +233,23 @@ environments:
 variable_; the value lives in the process environment and is read at call time. Resolved
 credentials and OAuth access tokens are never written to SQLite, never logged, never
 returned by a tool, and never visible to `run_api_code`.
+
+---
+
+### Reporting flaws upstream
+
+```yaml
+feedback:
+  upstream_issues: file # draft (default) | file | off
+  repositories:
+    users: acme/users-openapi # when the spec URL is not on GitHub
+  github:
+    token_env: GITHUB_TOKEN # needs permission to open issues
+    max_issues_per_repo_per_day: 5
+```
+
+Portolan files only against repositories listed here or detected from a GitHub spec URL.
+A repository suggested by an agent or by the document gets a draft link instead.
 
 ---
 

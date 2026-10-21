@@ -1,0 +1,50 @@
+# Every flaw here is one a strict validator rejects and Portolan repairs (D21).
+openapi: 3.0.3
+info:
+  title: Repairable API
+servers:
+  - url: https://repairable.example.com
+paths:
+  /users/{id}:
+    get:
+      operationId: getUser
+      responses:
+        '200':
+          description: OK
+  /groups/{groupId}:
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getGroup
+      responses:
+        '200':
+          description: OK
+  /teams/{teamId}:
+    get:
+      operationId: getTeam
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - name: orphan
+          in: path
+          required: true
+          schema:
+            type: string
+  /teams/{teamId}/members:
+    get:
+      operationId: listTeamMembers
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+      responses:
+        '200':
+          description: OK
+components:
+  parameters:
+    TeamId:
+      name: teamId
+      in: path
+      schema:
+        type: string

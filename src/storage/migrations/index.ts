@@ -108,4 +108,37 @@ CREATE VIRTUAL TABLE operation_fts USING fts5(
 );
 `,
   },
+  {
+    version: 2,
+    name: 'spec_corrections',
+    sql: `
+-- docs/DEVIATIONS.md D20/D21. The document as received is kept beside the corrected one
+-- so a correction can be added or reverted without fetching the source again.
+ALTER TABLE api_versions ADD COLUMN source_spec_json TEXT;
+
+-- An upstream repository supplied through add_api. Configured repositories are read from
+-- config.yaml at runtime and never stored.
+ALTER TABLE apis ADD COLUMN upstream_repo TEXT;
+
+CREATE TABLE spec_corrections (
+  id                    TEXT PRIMARY KEY,
+  api_id                TEXT NOT NULL REFERENCES apis(id) ON DELETE CASCADE,
+  origin                TEXT NOT NULL,
+  kind                  TEXT NOT NULL,
+  fingerprint           TEXT NOT NULL,
+  title                 TEXT NOT NULL,
+  description           TEXT,
+  patch_json            TEXT,
+  status                TEXT NOT NULL,
+  upstream_repo         TEXT,
+  upstream_issue_url    TEXT,
+  upstream_issue_status TEXT,
+  upstream_issue_at     TEXT,
+  created_at            TEXT NOT NULL,
+  updated_at            TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_spec_corrections_fingerprint ON spec_corrections(api_id, fingerprint);
+CREATE INDEX idx_spec_corrections_issue ON spec_corrections(upstream_repo, upstream_issue_status);
+`,
+  },
 ];

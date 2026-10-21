@@ -398,6 +398,12 @@ portolan doctor
 
 Claude is told this workflow automatically — you don't have to prompt it.
 
+**When an API doesn't match its specification**, Claude corrects Portolan's copy with
+`add_api` instead of working around the flaw on every call. The `add_api` result includes
+a link to report the flaw to the API's maintainers when Portolan knows their GitHub
+repository. To have Portolan file those issues itself, see "Reporting flaws upstream" in
+the [README](../README.md#reporting-flaws-upstream).
+
 ---
 
 ## Troubleshooting
@@ -414,6 +420,11 @@ check `claude mcp get portolan`.
 **`ENVIRONMENT_NOT_FOUND`**
 The API has no base URL — its specification declared a relative server, or none at all.
 Add an `environments:` entry as in Step 6.
+
+**`SPEC_PATCH_INVALID`**
+A correction did not apply to the registered document, or the result was not valid
+OpenAPI. Nothing was changed. Patch paths are JSON Pointers, so `/` in a path key is
+written `~1`: `/paths/~1users~1{id}/get`.
 
 **`MUTATION_NOT_ALLOWED`**
 Working as intended. Set `allow_mutations: true` on that specific environment (Step 7).
