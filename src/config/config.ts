@@ -106,6 +106,22 @@ function validateSemantics(config: PortolanConfig, source: string): PortolanConf
   return config;
 }
 
+/**
+ * Every environment variable this configuration reads a secret from. None of them is
+ * ever handed to a coding agent's process (docs/DEVIATIONS.md D24).
+ */
+export function secretEnvNames(config: PortolanConfig): Set<string> {
+  const names = new Set<string>();
+  for (const profile of Object.values(config.auth_profiles)) {
+    for (const [key, value] of Object.entries(profile)) {
+      if (key.endsWith('_env') && typeof value === 'string') names.add(value);
+    }
+  }
+  if (config.server.http.auth_token_env) names.add(config.server.http.auth_token_env);
+  if (config.feedback.github.token_env) names.add(config.feedback.github.token_env);
+  return names;
+}
+
 export function isLoopbackHost(host: string): boolean {
   const normalized = host.replace(/^\[|\]$/g, '').toLowerCase();
   return (
@@ -185,6 +201,27 @@ feedback:
   # github:
   #   token_env: GITHUB_TOKEN
   #   max_issues_per_repo_per_day: 5
+
+lint:
+  # Spectral's OpenAPI ruleset runs on every new document; findings never fail an
+  # import. Override a rule by name:
+  # rules:
+  #   operation-tags: off
+  #   oas3-valid-media-example: warn
+  enabled: true
+
+enrichment:
+  # Describe operations for search and review documents with a local coding agent
+  # over the Agent Client Protocol. The document is sent to that agent's provider.
+  #   auto   — Claude Code, then Codex: whichever is installed and logged in
+  #   claude — via claude-agent-acp, or npx when that is not installed
+  #   codex  — via codex-acp, or npx when that is not installed
+  #   off    — never start an agent
+  agent: auto
+  # model: sonnet
+  max_operations_per_api: 200
+  # Run a missing adapter with npx at a pinned version (downloads on first use).
+  npx_fallback: true
 
 logging:
   level: info

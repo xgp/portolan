@@ -141,4 +141,34 @@ CREATE UNIQUE INDEX idx_spec_corrections_fingerprint ON spec_corrections(api_id,
 CREATE INDEX idx_spec_corrections_issue ON spec_corrections(upstream_repo, upstream_issue_status);
 `,
   },
+  {
+    version: 3,
+    name: 'lint_and_enrichment',
+    sql: `
+-- docs/DEVIATIONS.md D23. Spectral findings for one stored version of a document. A
+-- version's content never changes, so neither do its findings.
+CREATE TABLE lint_findings (
+  api_version_id TEXT NOT NULL REFERENCES api_versions(id) ON DELETE CASCADE,
+  rule           TEXT NOT NULL,
+  severity       TEXT NOT NULL,
+  pointer        TEXT NOT NULL,
+  message        TEXT NOT NULL
+);
+CREATE INDEX idx_lint_findings_version ON lint_findings(api_version_id);
+
+-- docs/DEVIATIONS.md D24. What a coding agent wrote about part of a document, keyed by
+-- the hash of the content it was shown: an operation that is unchanged in a later
+-- version keeps its enrichment, and a changed one is described afresh.
+CREATE TABLE enrichments (
+  api_id        TEXT NOT NULL REFERENCES apis(id) ON DELETE CASCADE,
+  target        TEXT NOT NULL,
+  content_hash  TEXT NOT NULL,
+  canonical_id  TEXT,
+  payload_json  TEXT NOT NULL,
+  agent         TEXT NOT NULL,
+  created_at    TEXT NOT NULL,
+  PRIMARY KEY (api_id, target, content_hash)
+);
+`,
+  },
 ];

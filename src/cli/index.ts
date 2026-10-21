@@ -3,6 +3,7 @@
 import { Command } from 'commander';
 import { PortolanError } from '../errors/errors.js';
 import { doctorExitCode, formatDoctorReport, runDoctor } from './doctor.js';
+import { formatEnrichmentRun, runEnrich } from './enrich.js';
 import { runInit } from './init.js';
 import { runServe } from './serve.js';
 
@@ -81,6 +82,28 @@ export function buildProgram(): Command {
         };
         process.on('SIGINT', shutdown);
         process.on('SIGTERM', shutdown);
+      } catch (error) {
+        fail(error);
+      }
+    });
+
+  program
+    .command('enrich')
+    .description(
+      'describe operations for search with a coding agent now (default: every API with work pending)',
+    )
+    .argument('[api_ids...]', 'APIs to enrich')
+    .action(async (apiIds: string[]) => {
+      try {
+        const runs = await runEnrich({
+          ...(program.opts<{ config?: string }>().config
+            ? { configPath: program.opts<{ config?: string }>().config }
+            : {}),
+          apiIds,
+          onRun: (run) => console.log(formatEnrichmentRun(run)),
+        });
+        if (runs.length === 0) console.log('Nothing to enrich.');
+        process.exit(runs.some((run) => run.agent === null && run.operations_pending > 0) ? 1 : 0);
       } catch (error) {
         fail(error);
       }

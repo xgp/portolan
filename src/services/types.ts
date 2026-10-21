@@ -67,9 +67,40 @@ export interface AddApiResult {
   corrections_total?: number;
   /** Upstream issues drafted or filed by this call (D22). */
   upstream_issues?: UpstreamIssueSummary[];
+  /** Spectral findings for the version now current (D23). Absent when linting is off. */
+  lint?: LintSummary;
+  /** Whether a coding agent will describe the API's operations for search (D24). */
+  enrichment?: EnrichmentSummary;
 }
 
 export const MAX_REPORTED_CORRECTIONS = 20;
+
+export interface LintFindingSummary {
+  rule: string;
+  severity: 'error' | 'warn' | 'info' | 'hint';
+  /** JSON Pointer into the document. */
+  pointer: string;
+  message: string;
+}
+
+export interface LintSummary {
+  errors: number;
+  warnings: number;
+  info: number;
+  hints: number;
+  /** The most severe findings, at most {@link MAX_REPORTED_LINT_FINDINGS}. */
+  findings: LintFindingSummary[];
+}
+
+export const MAX_REPORTED_LINT_FINDINGS = 10;
+
+export interface EnrichmentSummary {
+  status: 'queued' | 'up_to_date' | 'disabled' | 'unavailable';
+  agent?: 'claude' | 'codex';
+  /** Operations that will be described. */
+  pending?: number;
+  message?: string;
+}
 
 // ---------------------------------------------------------------------------
 // find_api / search_api (SPEC.md §17, §18)
@@ -143,7 +174,22 @@ export interface InspectedOperation {
     { description?: string; content?: Record<string, { schema?: unknown }> }
   >;
   security?: unknown;
+  /** Spectral findings for this operation, most severe first (D23). */
+  lint?: LintFindingSummary[];
+  /**
+   * Descriptions and findings written by a coding agent rather than by the API's authors
+   * (D24). Useful where the document says little; the document stays authoritative.
+   */
+  generated?: {
+    by: string;
+    description?: string;
+    parameters?: Record<string, string>;
+    fields?: Record<string, string>;
+    findings?: { severity: 'error' | 'warn' | 'info'; message: string }[];
+  };
 }
+
+export const MAX_INSPECT_LINT_FINDINGS = 10;
 
 export interface InspectApiResult {
   api_id: string;

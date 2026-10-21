@@ -35,6 +35,8 @@ export async function runServe(options: ServeOptions = {}): Promise<ServeHandle>
   const transport = options.transport ?? config.server.transport;
 
   const app = createPortolan({ config });
+  // docs/DEVIATIONS.md D24: pick up enrichment a previous run did not finish.
+  app.enricher.scheduleAll();
 
   if (transport === 'stdio') {
     // Anything written to stdout other than JSON-RPC corrupts the transport; the logger

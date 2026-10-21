@@ -41,6 +41,8 @@ export async function startMcpHarness(options: McpHarnessOptions): Promise<McpHa
     stringifyYaml({
       database: { path: join(dataDir, 'portolan.db') },
       logging: { level: 'silent' },
+      // Never start a real coding agent from the test suite (docs/DEVIATIONS.md D24).
+      enrichment: { agent: 'off' },
       ...options.config,
     }),
     'utf8',

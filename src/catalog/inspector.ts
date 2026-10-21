@@ -9,12 +9,15 @@
  * schemas"), no fewer (or the agent is handed a dangling pointer).
  */
 import { PortolanError } from '../errors/errors.js';
+import { toPointer } from '../openapi/json-patch.js';
 import { isRecord, type OpenApiDocument, type OpenApiParameter } from '../openapi/types.js';
-import type {
-  InspectApiResult,
-  InspectedOperation,
-  InspectedParameter,
+import {
+  MAX_INSPECT_LINT_FINDINGS,
+  type InspectApiResult,
+  type InspectedOperation,
+  type InspectedParameter,
 } from '../services/types.js';
+import type { OperationEnrichmentPayload } from '../storage/repositories/types.js';
 import type { Catalog } from './catalog.js';
 
 export const MAX_INSPECT_OPERATIONS = 10;
@@ -63,17 +66,31 @@ export function inspectOperations(
       continue;
     }
     const stored = JSON.parse(resolved.operation.operationJson) as StoredOperation;
-    operations.push(
-      describeOperation(
-        stored,
-        resolved.operation.summary,
-        resolved.operation.description,
-        resolved.operation.tags,
-        resolved.operation.deprecated,
-        document,
-        refs,
-      ),
+    const inspected = describeOperation(
+      stored,
+      resolved.operation.summary,
+      resolved.operation.description,
+      resolved.operation.tags,
+      resolved.operation.deprecated,
+      document,
+      refs,
     );
+
+    // Info and hint findings are style notes; they are not worth an agent's context here.
+    const lint = catalog
+      .lintFindingsUnder(
+        version.id,
+        toPointer(['paths', stored.path, stored.method.toLowerCase()]),
+        MAX_INSPECT_LINT_FINDINGS,
+      )
+      .filter((finding) => finding.severity === 'error' || finding.severity === 'warn');
+    if (lint.length > 0) inspected.lint = lint;
+    const enrichment = catalog.operationEnrichment(apiId, resolved.operation);
+    if (enrichment) {
+      const payload = JSON.parse(enrichment.payloadJson) as OperationEnrichmentPayload;
+      inspected.generated = { by: enrichment.agent, ...payload };
+    }
+    operations.push(inspected);
   }
 
   const components = collectComponents(document, refs);

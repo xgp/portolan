@@ -7,15 +7,20 @@
 import type { PortolanConfig } from '../config/schema.js';
 import { errors, PortolanError } from '../errors/errors.js';
 import type { Logger } from '../logging.js';
+import type { Enricher } from '../enrichment/enricher.js';
 import type { NetworkPolicyOptions } from '../net/address-policy.js';
 import type { Database } from '../storage/database.js';
 import { ApiRepository } from '../storage/repositories/apis.js';
+import { EnrichmentRepository, operationContentHash } from '../storage/repositories/enrichments.js';
 import { EnvironmentRepository } from '../storage/repositories/environments.js';
+import { LintFindingRepository } from '../storage/repositories/lint-findings.js';
 import { OperationRepository } from '../storage/repositories/operations.js';
 import type {
   ApiRecord,
   ApiVersionRecord,
+  EnrichmentRecord,
   EnvironmentRecord,
+  LintFindingRecord,
   OperationRecord,
 } from '../storage/repositories/types.js';
 import type { AddApiInput, AddApiResult } from '../services/types.js';
@@ -31,16 +36,22 @@ export class Catalog {
   private readonly apis: ApiRepository;
   private readonly operations: OperationRepository;
   private readonly environments: EnvironmentRepository;
+  private readonly lintFindings: LintFindingRepository;
+  private readonly enrichments: EnrichmentRepository;
   private readonly importer: Importer;
 
   constructor(
     db: Database,
     private readonly config: PortolanConfig,
     private readonly logger: Logger,
+    /** docs/DEVIATIONS.md D24. Without one, nothing is enriched. */
+    private readonly enricher?: Enricher,
   ) {
     this.apis = new ApiRepository(db);
     this.operations = new OperationRepository(db);
     this.environments = new EnvironmentRepository(db);
+    this.lintFindings = new LintFindingRepository(db);
+    this.enrichments = new EnrichmentRepository(db);
     this.importer = new Importer({
       db,
       logger,
@@ -51,6 +62,7 @@ export class Catalog {
       allowAgentAuthProfileBinding: config.security.allow_agent_auth_profile_binding,
       knownAuthProfiles: new Set(Object.keys(config.auth_profiles)),
       feedback: config.feedback,
+      lint: config.lint,
     });
   }
 
@@ -60,8 +72,10 @@ export class Catalog {
     // registered after startup, not only to one that already existed when the process
     // began. Re-apply them here and report the reconciled list.
     this.applyConfiguredEnvironments(result.api_id);
+    const enrichment = this.enricher?.schedule(result.api_id);
     return {
       ...result,
+      ...(enrichment ? { enrichment } : {}),
       environments: this.environments.list(result.api_id).map((env) => ({
         name: env.name,
         base_url: env.baseUrl,
@@ -114,6 +128,16 @@ export class Catalog {
       );
     }
     return { api, version, operation };
+  }
+
+  /** D23: lint findings for an operation, or anything inside it. */
+  lintFindingsUnder(versionId: string, pointer: string, limit: number): LintFindingRecord[] {
+    return this.lintFindings.listUnder(versionId, pointer, limit);
+  }
+
+  /** D24: what a coding agent wrote about this exact operation, if anything. */
+  operationEnrichment(apiId: string, operation: OperationRecord): EnrichmentRecord | null {
+    return this.enrichments.get(apiId, 'operation', operationContentHash(operation.operationJson));
   }
 
   listEnvironments(apiId: string): EnvironmentRecord[] {

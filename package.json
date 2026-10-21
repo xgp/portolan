@@ -41,9 +41,14 @@
     "start": "node dist/cli/index.js"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^2.0.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.2",
     "@modelcontextprotocol/server": "^2.0.0",
     "@readme/openapi-parser": "^9.0.0",
+    "@stoplight/spectral-core": "^1.24.0",
+    "@stoplight/spectral-parsers": "^1.0.5",
+    "@stoplight/spectral-ref-resolver": "^1.0.5",
+    "@stoplight/spectral-rulesets": "^1.23.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "commander": "^15.0.0",

@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createTestCatalog, readSpec, type TestCatalog } from '../fixtures/helpers.js';
 import { PortolanError } from '../../src/errors/errors.js';
+import { inspectOperations } from '../../src/catalog/inspector.js';
 
 let harness: TestCatalog | undefined;
 
@@ -388,5 +389,54 @@ describe('add_api import pipeline', () => {
     await expect(
       c.addApi({ specContent: readSpec('petstore-3.0.json'), defaultBaseUrl: 'http://10.0.0.1' }),
     ).rejects.toMatchObject({ code: 'NETWORK_DESTINATION_BLOCKED' });
+  });
+});
+
+describe('linting during add_api (docs/DEVIATIONS.md D23)', () => {
+  it('reports counts and the most severe findings for the new version', async () => {
+    const result = await catalog().addApi({ specContent: readSpec('petstore-3.0.yaml') });
+    expect(result.lint).toMatchObject({ errors: 0, warnings: 5, info: 0, hints: 0 });
+    expect(result.lint!.findings).toContainEqual({
+      rule: 'operation-description',
+      severity: 'warn',
+      pointer: '/paths/~1pets/post',
+      message: 'Operation "description" must be present and non-empty string.',
+    });
+    // No enricher is attached to a bare catalog.
+    expect(result.enrichment).toBeUndefined();
+  });
+
+  it('keeps the findings of a version it reuses rather than linting again', async () => {
+    const c = catalog();
+    const first = await c.addApi({ specContent: readSpec('petstore-3.0.yaml'), apiId: 'pets' });
+    const again = await c.addApi({
+      specContent: readSpec('petstore-3.0.yaml'),
+      apiId: 'pets',
+      replace: true,
+    });
+    expect(again.status).toBe('unchanged');
+    expect(again.lint).toEqual(first.lint);
+  });
+
+  it("shows an operation's errors and warnings in inspect_api", async () => {
+    const c = catalog();
+    await c.addApi({ specContent: readSpec('petstore-3.0.yaml'), apiId: 'pets' });
+    const [operation] = inspectOperations(c, 'pets', ['createPet']).operations;
+    expect(operation!.lint).toEqual([
+      expect.objectContaining({ rule: 'operation-description', pointer: '/paths/~1pets/post' }),
+    ]);
+  });
+
+  it('can be switched off, or have rules overridden', async () => {
+    const off = await catalog({ lint: { enabled: false } }).addApi({
+      specContent: readSpec('petstore-3.0.yaml'),
+    });
+    expect(off.lint).toBeUndefined();
+    harness?.close();
+
+    const tuned = await catalog({ lint: { rules: { 'operation-description': 'off' } } }).addApi({
+      specContent: readSpec('petstore-3.0.yaml'),
+    });
+    expect(tuned.lint!.warnings).toBe(1);
   });
 });
