@@ -49,7 +49,11 @@ describe('portolan init', () => {
   it('reports an unusable data directory instead of a raw filesystem error', () => {
     const base = tmp();
     const configPath = join(base, 'config.yaml');
-    writeFileSync(configPath, 'database:\n  path: /proc/portolan-cannot-live-here/p.db\n');
+    // A directory cannot be created beneath a regular file, on any platform. (A path
+    // under /proc is no good: on Linux, Node's recursive mkdirSync loops forever there.)
+    const file = join(base, 'not-a-directory');
+    writeFileSync(file, '');
+    writeFileSync(configPath, `database:\n  path: ${join(file, 'p.db')}\n`);
     expect(() => runInit(configPath)).toThrow(/Could not create the data directory/);
   });
 
